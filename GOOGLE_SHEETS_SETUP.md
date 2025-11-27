@@ -117,7 +117,7 @@ localStorage.setItem('googleSheetsConfig', JSON.stringify({
 
 ## Solución de problemas
 
-**Error 302 (Redirect):** Asegúrate de que el script esté desplegado con acceso "Cualquier persona"
+**Error 302 (Redirect):** Asegurate de que el script esté desplegado con acceso "Cualquier persona"
 
 **Error 403 (Forbidden) o "Authorization required":** 
 - Ve a **Implementar → Administrar implementaciones**
