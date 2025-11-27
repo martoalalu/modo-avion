@@ -7,25 +7,25 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Modo Avión',
+  title: 'Sistema de Inventario',
   description: 'Gestión de productos, stock y ventas',
-  generator: 'Martin Alalú',
+  generator: 'v0.app',
   icons: {
     icon: [
       {
-        url: '/favicon.ico',
+        url: '/icon-light-32x32.png',
         media: '(prefers-color-scheme: light)',
       },
       {
-        url: '/favicon.ico',
+        url: '/icon-dark-32x32.png',
         media: '(prefers-color-scheme: dark)',
       },
       {
-        url: '/favicon.ico',
+        url: '/icon.svg',
         type: 'image/svg+xml',
       },
     ],
-    apple: '/favicon.ico',
+    apple: '/apple-icon.png',
   },
 }
 

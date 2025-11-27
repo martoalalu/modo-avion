@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-const PRELOADED_IPHONE_MODELS = [
+const PRELOADE_IPHONE_MODELS = [
   "16 PRO MAX",
   "16 PRO",
   "16",
@@ -84,6 +84,11 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
   const [variants, setVariants] = useState<ProductVariant[]>([])
   const [currentVariant, setCurrentVariant] = useState<ProductVariant>({ color: "", model: "" })
 
+  const [showVariantForm, setShowVariantForm] = useState(false)
+
+  const [variantPrice, setVariantPrice] = useState("")
+  const [variantStock, setVariantStock] = useState("0")
+
   const [isCustomColor, setIsCustomColor] = useState(false)
   const [customColor, setCustomColor] = useState("")
 
@@ -100,7 +105,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
   const [stockProductSearch, setStockProductSearch] = useState("")
 
   useEffect(() => {
-    const models = new Set<string>(PRELOADED_IPHONE_MODELS) // Start with preloaded models
+    const models = new Set<string>(PRELOADE_IPHONE_MODELS) // Start with preloaded models
     const colors = new Set<string>()
 
     data.products.forEach((product) => {
@@ -209,6 +214,11 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     setCurrentVariant({ color: "", model: "" })
     setIsCustomColor(false)
     setCustomColor("")
+    // Reset variant-specific price and stock when opening dialog
+    setVariantPrice("")
+    setVariantStock("0")
+    // Reset variant form visibility and related states
+    setShowVariantForm(false)
     setIsProductDialogOpen(true)
     setInitialStock("0")
   }
@@ -229,12 +239,22 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     setCurrentVariant({ color: "", model: "" })
     setIsCustomColor(false)
     setCustomColor("")
+    // Reset variant-specific price and stock when opening dialog
+    setVariantPrice("")
+    setVariantStock("0")
+    // Reset variant form visibility and related states
+    setShowVariantForm(false)
     setIsProductDialogOpen(true)
   }
 
   const handleAddVariant = () => {
     if (!currentVariant.model) {
-      alert("Por favor seleccione un modelo para la variante")
+      alert("El modelo es requerido para crear una variante")
+      return
+    }
+
+    if (!variantPrice) {
+      alert("El precio unitario es requerido para crear una variante")
       return
     }
 
@@ -245,10 +265,20 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
       return
     }
 
-    setVariants([...variants, currentVariant])
+    setVariants([
+      ...variants,
+      {
+        ...currentVariant,
+        price: variantPrice,
+        stock: variantStock,
+      },
+    ])
     setCurrentVariant({ color: "", model: "" })
+    setVariantPrice("")
+    setVariantStock("0")
     setIsCustomColor(false)
     setCustomColor("")
+    setShowVariantForm(false)
   }
 
   const handleRemoveVariant = (index: number) => {
@@ -258,78 +288,69 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
   const handleProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!productFormData.name || !productFormData.defaultUnitPrice || !productFormData.category) {
-      alert("Por favor complete los campos obligatorios (Nombre, Categoría, Precio)")
-      return
-    }
-
-    if (!editingProduct && variants.length > 0) {
-      // Creating multiple products from variants
-      const newProducts: Product[] = []
-
-      variants.forEach((variant) => {
-        const sku = generateSKU({ ...data, products: [...data.products, ...newProducts] })
-        const colorPart = variant.color ? ` - ${variant.color}` : ""
-        const newProduct: Product = {
-          id: generateId(),
-          name: `${productFormData.name} ${variant.model}${colorPart}`,
-          sku,
-          category: productFormData.category as "Funda" | "Accesorio" | "",
-          model: variant.model,
-          color: variant.color || undefined,
-          defaultUnitPrice: Number.parseFloat(productFormData.defaultUnitPrice),
-          createdAt: new Date().toISOString(),
-        }
-        newProducts.push(newProduct)
-      })
-
-      console.log("[v0] Creating products with variants:", newProducts.length)
-
-      const newStockMovements: StockMovement[] = []
-      const stockAmount = Number.parseInt(initialStock) || 0
-
-      if (stockAmount > 0) {
-        newProducts.forEach((product) => {
-          newStockMovements.push({
-            id: generateId(),
-            productId: product.id,
-            quantity: stockAmount,
-            date: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-          })
-        })
-      }
-
-      const newData = {
-        ...data,
-        products: [...data.products, ...newProducts],
-        stockMovements: [...data.stockMovements, ...newStockMovements],
-      }
-
-      updateData(newData)
-      alert(`${newProducts.length} producto(s) creado(s) exitosamente`)
+    if (editingProduct) {
+      const updatedProducts = data.products.map((p) =>
+        p.id === editingProduct.id
+          ? {
+              ...p,
+              name: productFormData.name,
+              category: productFormData.category,
+              model: productFormData.model,
+              color: productFormData.color,
+              defaultUnitPrice: Number.parseFloat(productFormData.defaultUnitPrice),
+            }
+          : p,
+      )
+      updateData({ ...data, products: updatedProducts })
     } else {
-      // Creating/editing single product
-      if (productFormData.category === "Funda" && !productFormData.model) {
-        alert("El modelo es obligatorio para las fundas")
-        return
-      }
+      // Creating new product(s)
+      if (variants.length > 0) {
+        const newProducts: Product[] = []
+        const newStockMovements: StockMovement[] = []
 
-      if (editingProduct) {
-        const updatedProducts = data.products.map((p) =>
-          p.id === editingProduct.id
-            ? {
-                ...p,
-                name: productFormData.name,
-                category: productFormData.category,
-                model: productFormData.model,
-                color: productFormData.color,
-                defaultUnitPrice: Number.parseFloat(productFormData.defaultUnitPrice),
-              }
-            : p,
-        )
-        updateData({ ...data, products: updatedProducts })
+        for (const variant of variants) {
+          const newProduct: Product = {
+            id: `product-${Date.now()}-${Math.random()}`,
+            name: productFormData.name,
+            sku: generateSKU({ ...data, products: [...data.products, ...newProducts] }),
+            category: productFormData.category,
+            model: variant.model,
+            color: variant.color || "",
+            defaultUnitPrice: variant.price
+              ? Number.parseFloat(variant.price)
+              : Number.parseFloat(productFormData.defaultUnitPrice),
+            createdAt: new Date().toISOString(),
+          }
+
+          newProducts.push(newProduct)
+
+          const variantStockAmount = variant.stock ? Number.parseInt(variant.stock) : 0
+          if (variantStockAmount > 0) {
+            const stockEntry: StockMovement = {
+              id: `stock-${Date.now()}-${Math.random()}`,
+              productId: newProduct.id,
+              quantity: variantStockAmount,
+              date: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+            }
+            newStockMovements.push(stockEntry)
+          }
+        }
+
+        updateData({
+          ...data,
+          products: [...data.products, ...newProducts],
+          stockMovements: [...data.stockMovements, ...newStockMovements],
+        })
+
+        alert(`${newProducts.length} producto(s) creado(s) exitosamente`)
       } else {
+        // Creating single product without variants
+        if (productFormData.category === "Funda" && !productFormData.model) {
+          alert("El modelo es obligatorio para las fundas")
+          return
+        }
+
         const sku = generateSKU(data)
         const newProduct: Product = {
           id: generateId(),
@@ -341,7 +362,28 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
           defaultUnitPrice: Number.parseFloat(productFormData.defaultUnitPrice),
           createdAt: new Date().toISOString(),
         }
-        updateData({ ...data, products: [...data.products, newProduct] })
+
+        const stockAmount = Number.parseInt(initialStock) || 0
+        const newMovements: StockMovement[] = []
+
+        if (stockAmount > 0) {
+          const newMovement: StockMovement = {
+            id: generateId(),
+            productId: newProduct.id,
+            quantity: stockAmount,
+            date: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          }
+          newMovements.push(newMovement)
+        }
+
+        updateData({
+          ...data,
+          products: [...data.products, newProduct],
+          stockMovements: [...data.stockMovements, ...newMovements],
+        })
+
+        alert("Producto creado exitosamente")
       }
     }
 
@@ -354,6 +396,11 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     setCurrentVariant({ color: "", model: "" })
     setIsCustomColor(false)
     setCustomColor("")
+    // Reset variant-specific price and stock after submit
+    setVariantPrice("")
+    setVariantStock("0")
+    // Reset variant form visibility and related states
+    setShowVariantForm(false)
   }
 
   const handleDeleteProduct = (productId: string) => {
@@ -762,7 +809,9 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                       </TableCell>
                       <TableCell>{product.color || "—"}</TableCell>
                       <TableCell>{product.model || "—"}</TableCell>
-                      <TableCell className="text-right font-medium">${product.defaultUnitPrice.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        ${product.defaultUnitPrice.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                      </TableCell>
                       <TableCell className="text-right">
                         <span
                           className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-semibold ${getStockColor(stock)}`}
@@ -812,7 +861,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
       </div>
 
       <Dialog open={isProductDialogOpen} onOpenChange={setIsProductDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingProduct ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
             <DialogDescription>
@@ -820,18 +869,20 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleProductSubmit}>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4">
+              {/* Always visible: Name */}
               <div className="space-y-2">
-                <Label htmlFor="name">Nombre *</Label>
+                <Label htmlFor="name">Nombre del Producto *</Label>
                 <Input
                   id="name"
                   value={productFormData.name}
                   onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })}
-                  placeholder="Nombre del producto"
+                  placeholder="Ej: Funda iPhone 15 Pro"
                   required
                 />
               </div>
 
+              {/* Always visible: Category */}
               <div className="space-y-2">
                 <Label htmlFor="category">Categoría *</Label>
                 <Select
@@ -841,6 +892,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                     if (value !== "Funda") {
                       setVariants([])
                       setCurrentVariant({ color: "", model: "" })
+                      setShowVariantForm(false)
                     }
                   }}
                 >
@@ -854,17 +906,20 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                 </Select>
               </div>
 
-              {!editingProduct && productFormData.category === "Funda" && variants.length === 0 && (
-                <div className="rounded-lg border p-4 bg-muted/30 space-y-3">
-                  <p className="text-sm text-muted-foreground">¿Desea crear este producto en múltiples variantes?</p>
-                  <p className="text-xs text-muted-foreground">
-                    Agregue combinaciones de color y modelo. Cada variante se creará como un producto separado.
-                  </p>
-                </div>
-              )}
-
+              {/* FUNDA FLOW - Show variant creation */}
               {!editingProduct && productFormData.category === "Funda" && (
                 <>
+                  {variants.length === 0 && !showVariantForm && (
+                    <div className="rounded-lg border p-4 bg-muted/30 space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        ¿Desea crear este producto en múltiples variantes?
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Agregue combinaciones de color y modelo. Cada variante se creará como un producto separado.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Variant List */}
                   {variants.length > 0 && (
                     <div className="space-y-2">
@@ -874,7 +929,18 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                           <div key={index} className="flex items-center justify-between p-3 hover:bg-muted/50">
                             <div className="text-sm">
                               <span className="font-medium">{variant.model}</span>
-                              <span className="text-muted-foreground"> - {variant.color}</span>
+                              <span className="text-muted-foreground"> - {variant.color || "Sin color"}</span>
+                              {variant.price && (
+                                <span className="text-muted-foreground ml-2">
+                                  - $
+                                  {Number.parseFloat(variant.price).toLocaleString("es-AR", {
+                                    maximumFractionDigits: 0,
+                                  })}
+                                </span>
+                              )}
+                              {variant.stock && (
+                                <span className="text-muted-foreground ml-1">({variant.stock} unidades)</span>
+                              )}
                             </div>
                             <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveVariant(index)}>
                               <X className="h-4 w-4" />
@@ -885,91 +951,169 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                     </div>
                   )}
 
-                  {/* Add Variant Section */}
-                  <div className="rounded-lg border p-4 space-y-4 bg-background">
-                    <Label className="text-base">{variants.length === 0 ? "Color y Modelo" : "Agregar Variante"}</Label>
+                  {!showVariantForm && (
+                    <Button type="button" variant="outline" onClick={() => setShowVariantForm(true)} className="w-full">
+                      <Plus className="h-4 w-4 mr-2" />
+                      {variants.length === 0 ? "Crear variantes" : "Agregar otra variante"}
+                    </Button>
+                  )}
 
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="variant-color" className="text-sm">
-                          Color (opcional)
+                  {/* Add Variant Form */}
+                  {showVariantForm && (
+                    <div className="rounded-lg border p-4 space-y-4 bg-background">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-base">
+                          {variants.length === 0 ? "Color y Modelo" : "Agregar Variante"}
                         </Label>
-                        <Select
-                          value={isCustomColor ? "custom" : currentVariant.color}
-                          onValueChange={(value) => {
-                            if (value === "custom") {
-                              setIsCustomColor(true)
-                              setCurrentVariant({ ...currentVariant, color: customColor })
-                            } else {
-                              setIsCustomColor(false)
-                              setCustomColor("")
-                              setCurrentVariant({ ...currentVariant, color: value })
-                            }
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setShowVariantForm(false)
+                            setCurrentVariant({ color: "", model: "" })
+                            setVariantPrice("")
+                            setVariantStock("0")
+                            setIsCustomColor(false)
+                            setCustomColor("")
                           }}
                         >
-                          <SelectTrigger id="variant-color">
-                            <SelectValue placeholder="Seleccione un color" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableColors.map((color) => (
-                              <SelectItem key={color} value={color}>
-                                {color}
-                              </SelectItem>
-                            ))}
-                            <SelectItem value="custom">+ Agregar otro color</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {isCustomColor && (
-                          <Input
-                            placeholder="Ingrese el nuevo color"
-                            value={customColor}
-                            onChange={(e) => {
-                              setCustomColor(e.target.value)
-                              setCurrentVariant({ ...currentVariant, color: e.target.value })
-                            }}
-                          />
-                        )}
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="variant-model" className="text-sm">
-                          Modelo de Celular *
-                        </Label>
-                        <Select
-                          value={currentVariant.model}
-                          onValueChange={(value) => setCurrentVariant({ ...currentVariant, model: value })}
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="variant-color" className="text-sm">
+                            Color (opcional)
+                          </Label>
+                          <Select
+                            value={isCustomColor ? "custom" : currentVariant.color}
+                            onValueChange={(value) => {
+                              if (value === "custom") {
+                                setIsCustomColor(true)
+                                setCurrentVariant({ ...currentVariant, color: customColor })
+                              } else {
+                                setIsCustomColor(false)
+                                setCustomColor("")
+                                setCurrentVariant({ ...currentVariant, color: value })
+                              }
+                            }}
+                          >
+                            <SelectTrigger id="variant-color">
+                              <SelectValue placeholder="Seleccione un color" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableColors.map((color) => (
+                                <SelectItem key={color} value={color}>
+                                  {color}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="custom">+ Agregar otro color</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {isCustomColor && (
+                            <Input
+                              placeholder="Ingrese el nuevo color"
+                              value={customColor}
+                              onChange={(e) => {
+                                setCustomColor(e.target.value)
+                                setCurrentVariant({ ...currentVariant, color: e.target.value })
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="variant-model" className="text-sm">
+                            Modelo *
+                          </Label>
+                          <Select
+                            value={isCustomModel ? "custom" : currentVariant.model}
+                            onValueChange={(value) => {
+                              if (value === "custom") {
+                                setIsCustomModel(true)
+                                setCurrentVariant({ ...currentVariant, model: customModel })
+                              } else {
+                                setIsCustomModel(false)
+                                setCustomModel("")
+                                setCurrentVariant({ ...currentVariant, model: value })
+                              }
+                            }}
+                          >
+                            <SelectTrigger id="variant-model">
+                              <SelectValue placeholder="Seleccione un modelo" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-60">
+                              {availableModels.map((model) => (
+                                <SelectItem key={model} value={model}>
+                                  {model}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="custom">+ Agregar otro modelo</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {isCustomModel && (
+                            <Input
+                              placeholder="Ingrese el nuevo modelo"
+                              value={customModel}
+                              onChange={(e) => {
+                                setCustomModel(e.target.value)
+                                setCurrentVariant({ ...currentVariant, model: e.target.value })
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="variant-price" className="text-sm">
+                            Precio Unitario *
+                          </Label>
+                          <Input
+                            id="variant-price"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={variantPrice}
+                            onChange={(e) => setVariantPrice(e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="variant-stock" className="text-sm">
+                            Stock Inicial
+                          </Label>
+                          <Input
+                            id="variant-stock"
+                            type="number"
+                            min="0"
+                            value={variantStock}
+                            onChange={(e) => setVariantStock(e.target.value)}
+                            placeholder="0"
+                          />
+                        </div>
+
+                        <Button
+                          type="button"
+                          onClick={handleAddVariant}
+                          className="w-full"
+                          disabled={!currentVariant.model || !variantPrice}
                         >
-                          <SelectTrigger id="variant-model">
-                            <SelectValue placeholder="Seleccione un modelo" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-60">
-                            {availableModels.map((model) => (
-                              <SelectItem key={model} value={model}>
-                                {model}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Agregar a la Lista
+                        </Button>
                       </div>
                     </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full bg-transparent"
-                      onClick={handleAddVariant}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      {variants.length === 0 ? "Agregar Primera Variante" : "Agregar Otra Variante"}
-                    </Button>
-                  </div>
+                  )}
                 </>
               )}
 
-              {(editingProduct || variants.length === 0) && (
+              {/* ACCESORIO FLOW - Show individual product fields */}
+              {productFormData.category === "Accesorio" && (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="color">Color (opcional)</Label>
+                    <Label htmlFor="color">Color (Opcional)</Label>
                     <Select
                       value={isCustomColor ? "custom" : productFormData.color}
                       onValueChange={(value) => {
@@ -1008,10 +1152,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="model">
-                      Modelo de Celular {productFormData.category === "Funda" && "*"}
-                      {productFormData.category === "Accesorio" && " (Opcional)"}
-                    </Label>
+                    <Label htmlFor="model">Modelo de Celular (Opcional)</Label>
                     <Select
                       value={productFormData.model}
                       onValueChange={(value) => setProductFormData({ ...productFormData, model: value })}
@@ -1028,36 +1169,33 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="price">Precio Unitario *</Label>
+                    <Input
+                      id="price"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={productFormData.defaultUnitPrice}
+                      onChange={(e) => setProductFormData({ ...productFormData, defaultUnitPrice: e.target.value })}
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="initial-stock">Stock Inicial</Label>
+                    <Input
+                      id="initial-stock"
+                      type="number"
+                      min="0"
+                      value={initialStock}
+                      onChange={(e) => setInitialStock(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
                 </>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="price">Precio Unitario *</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={productFormData.defaultUnitPrice}
-                  onChange={(e) => setProductFormData({ ...productFormData, defaultUnitPrice: e.target.value })}
-                  placeholder="0.00"
-                  required
-                />
-              </div>
-
-              {!editingProduct && variants.length === 0 && (
-                <div className="space-y-2">
-                  <Label htmlFor="initial-stock">Stock Inicial</Label>
-                  <Input
-                    id="initial-stock"
-                    type="number"
-                    min="0"
-                    value={initialStock}
-                    onChange={(e) => setInitialStock(e.target.value)}
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-muted-foreground">Cantidad inicial de stock para este producto</p>
-                </div>
               )}
             </div>
             <DialogFooter>
