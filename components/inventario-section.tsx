@@ -877,7 +877,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                   id="name"
                   value={productFormData.name}
                   onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })}
-                  placeholder="Ej: Funda iPhone 15 Pro"
+                  placeholder="Ej: Black Airplane"
                   required
                 />
               </div>
