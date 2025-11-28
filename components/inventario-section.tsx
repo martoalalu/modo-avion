@@ -746,7 +746,6 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                   onCheckedChange={toggleSelectAll}
                 />
               </TableHead>
-              <TableHead className="w-24">SKU</TableHead>
               <TableHead className="min-w-[200px]">
                 <Button variant="ghost" size="sm" onClick={() => handleSort("name")} className="gap-1 px-0">
                   Nombre
@@ -784,7 +783,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
           <TableBody>
             {paginatedProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   No se encontraron productos
                 </TableCell>
               </TableRow>
@@ -800,7 +799,6 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                         onCheckedChange={() => toggleSelectRow(product.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{product.sku}</TableCell>
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell>{product.color}</TableCell>
                     <TableCell>{product.model}</TableCell>
