@@ -7,7 +7,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Modo Avión: Sistema de Inventario',
+  title: 'Sistema de Inventario',
   description: 'Gestión de productos, stock y ventas',
   generator: 'v0.app',
   icons: {

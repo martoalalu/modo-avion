@@ -2,21 +2,22 @@
 
 import type React from "react"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, Check, ChevronsUpDown } from "lucide-react"
 import { generateId, getAvailableStock } from "@/lib/storage"
-import type { AppData, Sale, SaleItem } from "@/lib/types"
+import type { AppData, Sale, SaleItem, Product } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 interface SalesFormProps {
   data: AppData
   updateData: (data: AppData) => void
   onSuccess?: () => void
-  existingSale?: Sale // Added prop for editing existing sales
+  existingSale?: Sale
 }
 
 interface SaleItemForm {
@@ -25,11 +26,183 @@ interface SaleItemForm {
   unitPrice: string
 }
 
+function filterProducts(products: Product[] | undefined | null, searchTerm: string): Product[] {
+  if (!products || !Array.isArray(products) || products.length === 0) {
+    return []
+  }
+
+  const searchLower = (searchTerm || "").toLowerCase().trim()
+
+  if (!searchLower) {
+    // Return first 5 products when no search term
+    return products.slice(0, 5)
+  }
+
+  const results: Product[] = []
+  for (let i = 0; i < products.length && results.length < 5; i++) {
+    const product = products[i]
+    if (!product || typeof product !== "object") continue
+
+    try {
+      const name = String(product.name || "").toLowerCase()
+      const color = String(product.color || "").toLowerCase()
+      const model = String(product.model || "").toLowerCase()
+      const sku = String(product.sku || "").toLowerCase()
+
+      if (
+        name.includes(searchLower) ||
+        color.includes(searchLower) ||
+        model.includes(searchLower) ||
+        sku.includes(searchLower)
+      ) {
+        results.push(product)
+      }
+    } catch {
+      // Skip this product if any error occurs
+      continue
+    }
+  }
+
+  return results
+}
+
+function ProductSearchDropdown({
+  products,
+  value,
+  onChange,
+  data,
+}: {
+  products: Product[]
+  value: string
+  onChange: (productId: string) => void
+  data: AppData
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const filteredProducts = useMemo(() => {
+    return filterProducts(products, debouncedSearch)
+  }, [products, debouncedSearch])
+
+  const selectedProduct = useMemo(() => {
+    if (!products || !Array.isArray(products) || !value) return null
+    return products.find((p) => p?.id === value) || null
+  }, [products, value])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setSearch(e.target.value)
+  }, [])
+
+  const handleProductSelect = useCallback(
+    (productId: string) => {
+      onChange(productId)
+      setSearch("")
+      setDebouncedSearch("")
+      setOpen(false)
+    },
+    [onChange],
+  )
+
+  const handleToggleOpen = useCallback(() => {
+    setOpen((prev) => !prev)
+  }, [])
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className={cn(
+          "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background cursor-pointer",
+          open && "ring-2 ring-ring ring-offset-2",
+        )}
+        onClick={handleToggleOpen}
+      >
+        <span className={cn(!selectedProduct && "text-muted-foreground")}>
+          {selectedProduct ? selectedProduct.name : "Seleccione un producto..."}
+        </span>
+        <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+      </div>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-lg">
+          <div className="p-2">
+            <Input
+              ref={inputRef}
+              placeholder="Buscar por nombre, color, modelo o SKU..."
+              value={search}
+              onChange={handleSearchChange}
+              className="h-9"
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              onFocus={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="max-h-60 overflow-y-auto p-1">
+            {filteredProducts.length > 0 ? (
+              filteredProducts.map((product) => {
+                if (!product) return null
+                const stock = getAvailableStock(product.id, data)
+                const isSelected = product.id === value
+                return (
+                  <div
+                    key={product.id}
+                    className={cn(
+                      "flex cursor-pointer items-center rounded-sm px-2 py-2 text-sm hover:bg-accent",
+                      isSelected && "bg-accent",
+                    )}
+                    onClick={() => handleProductSelect(product.id)}
+                  >
+                    <Check className={cn("mr-2 h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
+                    <div className="flex flex-col">
+                      <div className="font-medium">{product.name || "Sin nombre"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {product.color && `${product.color}`}
+                        {product.model && ` • ${product.model}`}
+                        {` • Stock: ${stock}`}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="p-3 text-sm text-muted-foreground text-center">
+                {debouncedSearch ? "No se encontraron productos" : "No hay productos disponibles"}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFormProps) {
   const [saleDate, setSaleDate] = useState(existingSale?.date || new Date().toISOString().split("T")[0])
   const [paymentMethod, setPaymentMethod] = useState(existingSale?.paymentMethod || "efectivo")
   const [items, setItems] = useState<SaleItemForm[]>([{ productId: "", quantity: "", unitPrice: "" }])
-  const [productSearches, setProductSearches] = useState<Record<number, string>>({})
   const [manualTotal, setManualTotal] = useState<string>("")
   const [isManualTotalEdited, setIsManualTotalEdited] = useState(false)
 
@@ -64,31 +237,13 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
     newItems[index] = { ...newItems[index], [field]: value }
 
     if (field === "productId" && value) {
-      const product = data.products.find((p) => p.id === value)
+      const product = (data?.products || []).find((p) => p.id === value)
       if (product) {
         newItems[index].unitPrice = product.defaultUnitPrice.toString()
       }
     }
 
     setItems(newItems)
-  }
-
-  const updateProductSearch = (index: number, search: string) => {
-    setProductSearches((prev) => ({ ...prev, [index]: search }))
-  }
-
-  const getFilteredProductsForItem = (index: number) => {
-    const search = productSearches[index] || ""
-    if (!search.trim()) return data.products
-
-    const searchLower = search.toLowerCase()
-    return data.products.filter(
-      (product) =>
-        product.name.toLowerCase().includes(searchLower) ||
-        product.color?.toLowerCase().includes(searchLower) ||
-        product.model?.toLowerCase().includes(searchLower) ||
-        product.sku?.toLowerCase().includes(searchLower),
-    )
   }
 
   const calculateLineTotal = (item: SaleItemForm): number => {
@@ -131,6 +286,7 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
       return
     }
 
+    const products = data?.products || []
     for (const item of validItems) {
       const available = getAvailableStock(item.productId, data)
       const requested = Number.parseInt(item.quantity)
@@ -144,14 +300,14 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
       }
 
       if (requested > adjustedAvailable) {
-        const product = data.products.find((p) => p.id === item.productId)
+        const product = products.find((p) => p.id === item.productId)
         alert(`Stock insuficiente para ${product?.name}. Disponible: ${adjustedAvailable}, Solicitado: ${requested}`)
         return
       }
     }
 
     const saleItems: SaleItem[] = validItems.map((item) => {
-      const product = data.products.find((p) => p.id === item.productId)
+      const product = products.find((p) => p.id === item.productId)
       const quantity = Number.parseInt(item.quantity)
       const unitPrice = Number.parseFloat(item.unitPrice)
 
@@ -165,7 +321,6 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
     })
 
     if (existingSale) {
-      console.log("[v0] Updating sale:", existingSale.id)
       const updatedSale: Sale = {
         ...existingSale,
         date: saleDate,
@@ -174,14 +329,13 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
         items: saleItems,
       }
 
-      const updatedSales = data.sales.map((s) => (s.id === existingSale.id ? updatedSale : s))
+      const updatedSales = (data?.sales || []).map((s) => (s.id === existingSale.id ? updatedSale : s))
 
       updateData({
         ...data,
         sales: updatedSales,
       })
 
-      console.log("[v0] Sale updated successfully")
       alert("Venta actualizada con éxito")
     } else {
       const newSale: Sale = {
@@ -192,13 +346,11 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
         items: saleItems,
       }
 
-      console.log("[v0] Creating new sale")
       updateData({
         ...data,
-        sales: [...data.sales, newSale],
+        sales: [...(data?.sales || []), newSale],
       })
 
-      console.log("[v0] Sale created successfully")
       alert("Venta registrada con éxito")
     }
 
@@ -212,14 +364,6 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
       onSuccess()
     }
   }
-
-  const uniqueModels = useMemo(() => {
-    const models = new Set<string>()
-    data.products.forEach((p) => {
-      if (p.model) models.add(p.model)
-    })
-    return Array.from(models).sort()
-  }, [data.products])
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
@@ -258,9 +402,7 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
           {items.map((item, index) => {
             const availableStock = item.productId ? getAvailableStock(item.productId, data) : 0
-            const selectedProduct = item.productId ? data.products.find((p) => p.id === item.productId) : null
-
-            const filteredProducts = getFilteredProductsForItem(index)
+            const selectedProduct = item.productId ? (data?.products || []).find((p) => p.id === item.productId) : null
 
             return (
               <Card key={index} className="relative">
@@ -279,50 +421,12 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
 
                   <div className="space-y-2 pr-8">
                     <Label className="text-sm">Producto</Label>
-                    <div className="space-y-2">
-                      <Input
-                        placeholder="Buscar por nombre, color, modelo o SKU..."
-                        value={productSearches[index] || ""}
-                        onChange={(e) => updateProductSearch(index, e.target.value)}
-                        className="text-sm"
-                      />
-                      <Select
-                        value={item.productId}
-                        onValueChange={(value) => {
-                          updateItem(index, "productId", value)
-                          updateProductSearch(index, "")
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccione un producto..." />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {filteredProducts.length > 0 ? (
-                            filteredProducts.map((product) => {
-                              const stock = getAvailableStock(product.id, data)
-                              return (
-                                <SelectItem key={product.id} value={product.id}>
-                                  <div className="flex flex-col">
-                                    <div className="font-medium">{product.name}</div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {product.color && `${product.color}`}
-                                      {product.model && ` • ${product.model}`}
-                                      {` • Stock: ${stock}`}
-                                    </div>
-                                  </div>
-                                </SelectItem>
-                              )
-                            })
-                          ) : (
-                            <div className="p-3 text-sm text-muted-foreground text-center">
-                              {productSearches[index]
-                                ? "No se encontraron productos con ese criterio"
-                                : "No hay productos disponibles"}
-                            </div>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <ProductSearchDropdown
+                      products={data?.products || []}
+                      value={item.productId}
+                      onChange={(productId) => updateItem(index, "productId", productId)}
+                      data={data}
+                    />
                   </div>
 
                   {selectedProduct && (
