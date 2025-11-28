@@ -42,6 +42,7 @@ const PRELOADE_IPHONE_MODELS = [
   "16",
   "15 PRO MAX",
   "15 PRO",
+  "15",
   "14 PRO MAX",
   "14 PRO",
   "14",
@@ -49,6 +50,9 @@ const PRELOADE_IPHONE_MODELS = [
   "13 PRO MAX",
   "13 PRO",
   "11",
+  "12 PRO MAX",
+  "XR",
+  "7/8/SE"
 ]
 
 export function InventarioSection({ data, updateData }: InventarioSectionProps) {
