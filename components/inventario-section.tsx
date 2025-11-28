@@ -196,9 +196,15 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     return data.products.filter(
       (product) =>
         product.name.toLowerCase().includes(search) ||
-        product.color?.toLowerCase().includes(search) ||
-        product.model?.toLowerCase().includes(search) ||
-        product.sku?.toLowerCase().includes(search),
+        String(product.color || "")
+          .toLowerCase()
+          .includes(search) ||
+        String(product.model || "")
+          .toLowerCase()
+          .includes(search) ||
+        String(product.sku || "")
+          .toLowerCase()
+          .includes(search),
     )
   }, [data.products, stockProductSearch])
 
@@ -254,6 +260,16 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     setVariantStock("0")
     setShowVariantForm(false)
     setIsProductDialogOpen(true)
+    // If editing, we might want to pre-fill color, model, price based on the product, but the form logic handles this now
+    if (product.color) {
+      setProductFormData((prev) => ({ ...prev, color: product.color! }))
+    }
+    if (product.model) {
+      setProductFormData((prev) => ({ ...prev, model: product.model! }))
+    }
+    if (product.defaultUnitPrice) {
+      setProductFormData((prev) => ({ ...prev, defaultUnitPrice: product.defaultUnitPrice.toString() }))
+    }
   }
 
   const handleAddVariant = () => {
@@ -302,9 +318,9 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
           ? {
               ...p,
               name: productFormData.name,
-              category: productFormData.category,
-              model: productFormData.model,
-              color: productFormData.color,
+              category: productFormData.category as "Funda" | "Accesorio" | "",
+              model: productFormData.model || undefined, // Ensure model can be undefined
+              color: productFormData.color || undefined, // Ensure color can be undefined
               defaultUnitPrice: Number.parseFloat(productFormData.defaultUnitPrice),
             }
           : p,
@@ -320,9 +336,9 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
             id: `product-${Date.now()}-${Math.random()}`,
             name: productFormData.name,
             sku: generateSKU({ ...data, products: [...data.products, ...newProducts] }),
-            category: productFormData.category,
+            category: productFormData.category as "Funda" | "Accesorio" | "",
             model: variant.model,
-            color: variant.color || "",
+            color: variant.color || undefined,
             defaultUnitPrice: variant.price
               ? Number.parseFloat(variant.price)
               : Number.parseFloat(productFormData.defaultUnitPrice),
@@ -363,7 +379,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
           name: productFormData.name,
           sku,
           category: productFormData.category as "Funda" | "Accesorio" | "",
-          model: productFormData.model,
+          model: productFormData.model || undefined,
           color: productFormData.color || undefined,
           defaultUnitPrice: Number.parseFloat(productFormData.defaultUnitPrice),
           createdAt: new Date().toISOString(),
@@ -405,6 +421,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     setVariantPrice("")
     setVariantStock("0")
     setShowVariantForm(false)
+    setEditingProduct(null) // Reset editing state
   }
 
   const handleDeleteProduct = (productId: string) => {
@@ -456,8 +473,11 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
       quantity: "",
       date: new Date().toISOString().split("T")[0],
     })
-    setIsCustomModel(false)
+    setIsCustomModel(false) // Resetting these state values
     setCustomModel("")
+    setIsCustomColor(false)
+    setCustomColor("")
+    setStockProductSearch("") // Clear search term for stock dialog
     setIsStockDialogOpen(true)
   }
 
@@ -726,7 +746,6 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                   onCheckedChange={toggleSelectAll}
                 />
               </TableHead>
-              <TableHead className="w-24">SKU</TableHead>
               <TableHead className="min-w-[200px]">
                 <Button variant="ghost" size="sm" onClick={() => handleSort("name")} className="gap-1 px-0">
                   Nombre
@@ -764,7 +783,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
           <TableBody>
             {paginatedProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center">
+                <TableCell colSpan={8} className="h-24 text-center">
                   No se encontraron productos
                 </TableCell>
               </TableRow>
@@ -780,7 +799,6 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                         onCheckedChange={() => toggleSelectRow(product.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{product.sku}</TableCell>
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell>{product.color}</TableCell>
                     <TableCell>{product.model}</TableCell>
@@ -926,6 +944,112 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                 </Select>
               </div>
 
+              {editingProduct && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-color">Color (Opcional)</Label>
+                    <Select
+                      value={isCustomColor ? "custom" : productFormData.color || "none"}
+                      onValueChange={(value) => {
+                        if (value === "custom") {
+                          setIsCustomColor(true)
+                          setProductFormData({ ...productFormData, color: customColor })
+                        } else if (value === "none") {
+                          setIsCustomColor(false)
+                          setCustomColor("")
+                          setProductFormData({ ...productFormData, color: "" })
+                        } else {
+                          setIsCustomColor(false)
+                          setCustomColor("")
+                          setProductFormData({ ...productFormData, color: value })
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="edit-color">
+                        <SelectValue placeholder="Seleccione un color" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin color</SelectItem>
+                        {availableColors.map((color) => (
+                          <SelectItem key={color} value={color}>
+                            {color}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="custom">+ Agregar otro color</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {isCustomColor && (
+                      <Input
+                        placeholder="Ingrese el nuevo color"
+                        value={customColor}
+                        onChange={(e) => {
+                          setCustomColor(e.target.value)
+                          setProductFormData({ ...productFormData, color: e.target.value })
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-model">Modelo de Celular (Opcional)</Label>
+                    <Select
+                      value={isCustomModel ? "custom" : productFormData.model || "none"}
+                      onValueChange={(value) => {
+                        if (value === "custom") {
+                          setIsCustomModel(true)
+                          setProductFormData({ ...productFormData, model: customModel })
+                        } else if (value === "none") {
+                          setIsCustomModel(false)
+                          setCustomModel("")
+                          setProductFormData({ ...productFormData, model: "" })
+                        } else {
+                          setIsCustomModel(false)
+                          setCustomModel("")
+                          setProductFormData({ ...productFormData, model: value })
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="edit-model">
+                        <SelectValue placeholder="Seleccione un modelo" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        <SelectItem value="none">Sin modelo</SelectItem>
+                        {availableModels.map((model) => (
+                          <SelectItem key={model} value={model}>
+                            {model}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="custom">+ Agregar otro modelo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {isCustomModel && (
+                      <Input
+                        placeholder="Ingrese el nuevo modelo"
+                        value={customModel}
+                        onChange={(e) => {
+                          setCustomModel(e.target.value)
+                          setProductFormData({ ...productFormData, model: e.target.value })
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-price">Precio Unitario *</Label>
+                    <Input
+                      id="edit-price"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={productFormData.defaultUnitPrice}
+                      onChange={(e) => setProductFormData({ ...productFormData, defaultUnitPrice: e.target.value })}
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
+                </>
+              )}
+
               {/* FUNDA FLOW - Show variant creation */}
               {!editingProduct && productFormData.category === "Funda" && (
                 <>
@@ -1008,11 +1132,15 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                             Color (opcional)
                           </Label>
                           <Select
-                            value={isCustomColor ? "custom" : currentVariant.color}
+                            value={isCustomColor ? "custom" : currentVariant.color || "none"}
                             onValueChange={(value) => {
                               if (value === "custom") {
                                 setIsCustomColor(true)
                                 setCurrentVariant({ ...currentVariant, color: customColor })
+                              } else if (value === "none") {
+                                setIsCustomColor(false)
+                                setCustomColor("")
+                                setCurrentVariant({ ...currentVariant, color: "" })
                               } else {
                                 setIsCustomColor(false)
                                 setCustomColor("")
@@ -1024,6 +1152,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                               <SelectValue placeholder="Seleccione un color" />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value="none">Sin color</SelectItem>
                               {availableColors.map((color) => (
                                 <SelectItem key={color} value={color}>
                                   {color}
@@ -1049,11 +1178,15 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                             Modelo *
                           </Label>
                           <Select
-                            value={isCustomModel ? "custom" : currentVariant.model}
+                            value={isCustomModel ? "custom" : currentVariant.model || "none"}
                             onValueChange={(value) => {
                               if (value === "custom") {
                                 setIsCustomModel(true)
                                 setCurrentVariant({ ...currentVariant, model: customModel })
+                              } else if (value === "none") {
+                                setIsCustomModel(false)
+                                setCustomModel("")
+                                setCurrentVariant({ ...currentVariant, model: "" })
                               } else {
                                 setIsCustomModel(false)
                                 setCustomModel("")
@@ -1065,6 +1198,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                               <SelectValue placeholder="Seleccione un modelo" />
                             </SelectTrigger>
                             <SelectContent className="max-h-60">
+                              <SelectItem value="none">Sin modelo</SelectItem>
                               {availableModels.map((model) => (
                                 <SelectItem key={model} value={model}>
                                   {model}
@@ -1135,11 +1269,15 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                   <div className="space-y-2">
                     <Label htmlFor="color">Color (Opcional)</Label>
                     <Select
-                      value={isCustomColor ? "custom" : productFormData.color}
+                      value={isCustomColor ? "custom" : productFormData.color || "none"}
                       onValueChange={(value) => {
                         if (value === "custom") {
                           setIsCustomColor(true)
                           setProductFormData({ ...productFormData, color: customColor })
+                        } else if (value === "none") {
+                          setIsCustomColor(false)
+                          setCustomColor("")
+                          setProductFormData({ ...productFormData, color: "" })
                         } else {
                           setIsCustomColor(false)
                           setCustomColor("")
@@ -1151,6 +1289,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                         <SelectValue placeholder="Seleccione un color" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="none">Sin color</SelectItem>
                         {availableColors.map((color) => (
                           <SelectItem key={color} value={color}>
                             {color}
@@ -1174,20 +1313,45 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                   <div className="space-y-2">
                     <Label htmlFor="model">Modelo de Celular (Opcional)</Label>
                     <Select
-                      value={productFormData.model}
-                      onValueChange={(value) => setProductFormData({ ...productFormData, model: value })}
+                      value={isCustomModel ? "custom" : productFormData.model || "none"}
+                      onValueChange={(value) => {
+                        if (value === "custom") {
+                          setIsCustomModel(true)
+                          setProductFormData({ ...productFormData, model: customModel })
+                        } else if (value === "none") {
+                          setIsCustomModel(false)
+                          setCustomModel("")
+                          setProductFormData({ ...productFormData, model: "" })
+                        } else {
+                          setIsCustomModel(false)
+                          setCustomModel("")
+                          setProductFormData({ ...productFormData, model: value })
+                        }
+                      }}
                     >
                       <SelectTrigger id="model">
                         <SelectValue placeholder="Seleccione un modelo" />
                       </SelectTrigger>
                       <SelectContent className="max-h-60">
+                        <SelectItem value="none">Sin modelo</SelectItem>
                         {availableModels.map((model) => (
                           <SelectItem key={model} value={model}>
                             {model}
                           </SelectItem>
                         ))}
+                        <SelectItem value="custom">+ Agregar otro modelo</SelectItem>
                       </SelectContent>
                     </Select>
+                    {isCustomModel && (
+                      <Input
+                        placeholder="Ingrese el nuevo modelo"
+                        value={customModel}
+                        onChange={(e) => {
+                          setCustomModel(e.target.value)
+                          setProductFormData({ ...productFormData, model: e.target.value })
+                        }}
+                      />
+                    )}
                   </div>
 
                   <div className="space-y-2">
