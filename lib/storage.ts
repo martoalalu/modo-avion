@@ -1,10 +1,13 @@
 import type { AppData } from "./types"
 
 export function getAvailableStock(productId: string, data: AppData): number {
-  const stockIn = data.stockMovements.filter((m) => m.productId === productId).reduce((sum, m) => sum + m.quantity, 0)
+  const stockMovements = data?.stockMovements || []
+  const sales = data?.sales || []
 
-  const stockOut = data.sales
-    .flatMap((s) => s.items)
+  const stockIn = stockMovements.filter((m) => m.productId === productId).reduce((sum, m) => sum + m.quantity, 0)
+
+  const stockOut = sales
+    .flatMap((s) => s.items || [])
     .filter((item) => item.productId === productId)
     .reduce((sum, item) => sum + item.quantity, 0)
 
@@ -12,8 +15,10 @@ export function getAvailableStock(productId: string, data: AppData): number {
 }
 
 export function getLastSaleDate(productId: string, data: AppData): string | null {
-  const salesWithProduct = data.sales
-    .filter((s) => s.items.some((item) => item.productId === productId))
+  const sales = data?.sales || []
+
+  const salesWithProduct = sales
+    .filter((s) => s.items?.some((item) => item.productId === productId))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return salesWithProduct.length > 0 ? salesWithProduct[0].date : null

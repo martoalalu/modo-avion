@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Pencil, Trash2, ArrowUpDown, X } from "lucide-react"
+import { Plus, Pencil, Trash2, ArrowUpDown, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { generateId, getAvailableStock, getLastSaleDate, generateSKU } from "@/lib/storage"
 import type {
   Product,
@@ -27,7 +27,7 @@ import type {
   SortDirection,
   ProductVariant,
 } from "@/lib/types"
-import { Badge } from "@/components/ui/badge" // Import Badge component
+import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,7 +42,6 @@ const PRELOADE_IPHONE_MODELS = [
   "16",
   "15 PRO MAX",
   "15 PRO",
-  "15",
   "14 PRO MAX",
   "14 PRO",
   "14",
@@ -50,10 +49,10 @@ const PRELOADE_IPHONE_MODELS = [
   "13 PRO MAX",
   "13 PRO",
   "11",
-  "12 PRO MAX",
-  "XR",
-  "7/8/SE"
 ]
+
+const ITEMS_PER_PAGE = 50 // Show 50 items per page for better performance
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200]
 
 export function InventarioSection({ data, updateData }: InventarioSectionProps) {
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false)
@@ -66,6 +65,9 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
   const [filterColor, setFilterColor] = useState<string[]>([])
   const [sortField, setSortField] = useState<SortField>("stock")
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
+
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE)
 
   const [productFormData, setProductFormData] = useState({
     name: "",
@@ -101,10 +103,6 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [availableColors, setAvailableColors] = useState<string[]>([])
 
-  // Removed unused states: selectedColors, selectedModels
-  // const [selectedColors, setSelectedColors] = useState<string[]>([])
-  // const [selectedModels, setSelectedModels] = useState<string[]>([])
-
   const [initialStock, setInitialStock] = useState("0")
   const [stockProductSearch, setStockProductSearch] = useState("")
 
@@ -120,6 +118,10 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     setAvailableModels(Array.from(models).sort())
     setAvailableColors(Array.from(colors).sort())
   }, [data.products])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filterModel, filterCategory, filterColor, filterStock])
 
   const filteredProducts = useMemo(() => {
     const result = data.products.filter((product) => {
@@ -180,6 +182,13 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     return result
   }, [data, searchTerm, filterModel, filterCategory, filterColor, filterStock, sortField, sortDirection])
 
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return filteredProducts.slice(startIndex, endIndex)
+  }, [filteredProducts, currentPage, itemsPerPage])
+
   const filteredStockProducts = useMemo(() => {
     if (!stockProductSearch.trim()) return data.products
 
@@ -218,10 +227,8 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     setCurrentVariant({ color: "", model: "" })
     setIsCustomColor(false)
     setCustomColor("")
-    // Reset variant-specific price and stock when opening dialog
     setVariantPrice("")
     setVariantStock("0")
-    // Reset variant form visibility and related states
     setShowVariantForm(false)
     setIsProductDialogOpen(true)
     setInitialStock("0")
@@ -243,10 +250,8 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     setCurrentVariant({ color: "", model: "" })
     setIsCustomColor(false)
     setCustomColor("")
-    // Reset variant-specific price and stock when opening dialog
     setVariantPrice("")
     setVariantStock("0")
-    // Reset variant form visibility and related states
     setShowVariantForm(false)
     setIsProductDialogOpen(true)
   }
@@ -262,7 +267,6 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
       return
     }
 
-    // Check if variant already exists (consider empty color as valid)
     const exists = variants.some((v) => v.color === currentVariant.color && v.model === currentVariant.model)
     if (exists) {
       alert("Esta combinación de color y modelo ya existe")
@@ -307,7 +311,6 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
       )
       updateData({ ...data, products: updatedProducts })
     } else {
-      // Creating new product(s)
       if (variants.length > 0) {
         const newProducts: Product[] = []
         const newStockMovements: StockMovement[] = []
@@ -349,7 +352,6 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
 
         alert(`${newProducts.length} producto(s) creado(s) exitosamente`)
       } else {
-        // Creating single product without variants
         if (productFormData.category === "Funda" && !productFormData.model) {
           alert("El modelo es obligatorio para las fundas")
           return
@@ -400,10 +402,8 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     setCurrentVariant({ color: "", model: "" })
     setIsCustomColor(false)
     setCustomColor("")
-    // Reset variant-specific price and stock after submit
     setVariantPrice("")
     setVariantStock("0")
-    // Reset variant form visibility and related states
     setShowVariantForm(false)
   }
 
@@ -433,10 +433,10 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
   }
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredProducts.length) {
+    if (selectedIds.size === paginatedProducts.length) {
       setSelectedIds(new Set())
     } else {
-      setSelectedIds(new Set(filteredProducts.map((item) => item.id)))
+      setSelectedIds(new Set(paginatedProducts.map((item) => item.id)))
     }
   }
 
@@ -491,21 +491,21 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     })
   }
 
-  // Removed unused functions: toggleColor, toggleModel
-  // const toggleColor = (color: string) => {
-  //   setSelectedColors((prev) => (prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]))
-  // }
-
-  // const toggleModel = (model: string) => {
-  //   setSelectedModels((prev) => (prev.includes(model) ? prev.filter((m) => m !== model) : [...prev, model]))
-  // }
-
   const toggleFilter = (currentFilters: string[], value: string) => {
     if (currentFilters.includes(value)) {
       return currentFilters.filter((v) => v !== value)
     } else {
       return [...currentFilters, value]
     }
+  }
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(Number.parseInt(value))
+    setCurrentPage(1) // Reset to first page
   }
 
   return (
@@ -532,7 +532,6 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
           )}
         </div>
       </div>
-      {/* </CHANGE> */}
 
       <div className="space-y-4">
         <div className="w-full">
@@ -589,35 +588,13 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                       setFilterColor(toggleFilter(filterColor, color))
                     }}
                   >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-4 w-4 rounded border ${
-                          filterColor.includes(color) ? "bg-primary border-primary" : "border-input"
-                        }`}
-                      >
-                        {filterColor.includes(color) && (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-4 w-4 text-primary-foreground"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </div>
-                      <span>{color}</span>
-                    </div>
+                    <Checkbox checked={filterColor.includes(color)} className="mr-2" />
+                    {color}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-
           <div className="space-y-2">
             <Label htmlFor="filter-model" className="text-sm">
               Filtrar por Modelo
@@ -645,35 +622,13 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                       setFilterModel(toggleFilter(filterModel, model))
                     }}
                   >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-4 w-4 rounded border ${
-                          filterModel.includes(model) ? "bg-primary border-primary" : "border-input"
-                        }`}
-                      >
-                        {filterModel.includes(model) && (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-4 w-4 text-primary-foreground"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </div>
-                      <span>{model}</span>
-                    </div>
+                    <Checkbox checked={filterModel.includes(model)} className="mr-2" />
+                    {model}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-
           <div className="space-y-2">
             <Label htmlFor="filter-stock" className="text-sm">
               Filtrar por Stock
@@ -682,8 +637,8 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="w-full justify-between bg-transparent">
                   {filterStock.length === 0
-                    ? "Todo el stock"
-                    : `${filterStock.length} nivel${filterStock.length > 1 ? "es" : ""}`}
+                    ? "Todos los niveles"
+                    : `${filterStock.length} seleccionado${filterStock.length > 1 ? "s" : ""}`}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56">
@@ -693,176 +648,237 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                     <DropdownMenuSeparator />
                   </>
                 )}
-                {[
-                  { value: "no-stock", label: "Sin stock (0)" },
-                  { value: "critical", label: "Stock crítico (1-5)" },
-                  { value: "low", label: "Stock bajo (6-10)" },
-                  { value: "normal", label: "Stock normal (> 10)" },
-                ].map((option) => (
-                  <DropdownMenuItem
-                    key={option.value}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setFilterStock(toggleFilter(filterStock, option.value))
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-4 w-4 rounded border ${
-                          filterStock.includes(option.value) ? "bg-primary border-primary" : "border-input"
-                        }`}
-                      >
-                        {filterStock.includes(option.value) && (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-4 w-4 text-primary-foreground"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </div>
-                      <span>{option.label}</span>
-                    </div>
-                  </DropdownMenuItem>
-                ))}
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setFilterStock(toggleFilter(filterStock, "no-stock"))
+                  }}
+                >
+                  <Checkbox checked={filterStock.includes("no-stock")} className="mr-2" />
+                  Sin stock (0)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setFilterStock(toggleFilter(filterStock, "critical"))
+                  }}
+                >
+                  <Checkbox checked={filterStock.includes("critical")} className="mr-2" />
+                  Crítico (1-5)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setFilterStock(toggleFilter(filterStock, "low"))
+                  }}
+                >
+                  <Checkbox checked={filterStock.includes("low")} className="mr-2" />
+                  Bajo (6-10)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setFilterStock(toggleFilter(filterStock, "normal"))
+                  }}
+                >
+                  <Checkbox checked={filterStock.includes("normal")} className="mr-2" />
+                  Normal (10+)
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="items-per-page" className="text-sm">
+              Productos por página
+            </Label>
+            <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+              <SelectTrigger id="items-per-page">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={size.toString()}>
+                    {size} productos
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[40px]">
-                  <Checkbox
-                    checked={selectedIds.size === filteredProducts.length && filteredProducts.length > 0}
-                    onCheckedChange={toggleSelectAll}
-                    aria-label="Seleccionar todos"
-                  />
-                </TableHead>
-                <TableHead>
-                  <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort("name")}>
-                    Producto
-                    <ArrowUpDown className="ml-2 h-4 w-4" />
-                  </Button>
-                </TableHead>
-                <TableHead>Color</TableHead>
-                <TableHead>
-                  <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort("model")}>
-                    Modelo
-                    <ArrowUpDown className="ml-2 h-4 w-4" />
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Button variant="ghost" size="sm" className="-mr-3 h-8" onClick={() => handleSort("unitPrice")}>
-                    Precio Unitario
-                    <ArrowUpDown className="ml-2 h-4 w-4" />
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Button variant="ghost" size="sm" className="-mr-3 h-8" onClick={() => handleSort("stock")}>
-                    Stock Disponible
-                    <ArrowUpDown className="ml-2 h-4 w-4" />
-                  </Button>
-                </TableHead>
-                <TableHead className="text-right">Última Venta</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProducts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
-                    No se encontraron productos
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredProducts.map((product) => {
-                  const stock = getAvailableStock(product.id, data)
-                  const lastSale = getLastSaleDate(product.id, data)
-
-                  return (
-                    <TableRow key={product.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedIds.has(product.id)}
-                          onCheckedChange={() => toggleSelectRow(product.id)}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {product.name}
-                          <Badge
-                            variant="outline"
-                            className={
-                              product.category === "Funda"
-                                ? "bg-blue-50 text-blue-700 border-blue-200"
-                                : "bg-violet-50 text-violet-700 border-violet-200"
-                            }
-                          >
-                            {product.category}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell>{product.color || "—"}</TableCell>
-                      <TableCell>{product.model || "—"}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        ${product.defaultUnitPrice.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-semibold ${getStockColor(stock)}`}
-                        >
-                          {stock}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground">
-                        {lastSale ? new Date(lastSale).toLocaleDateString("es-AR") : "Sin ventas"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEditProductDialog(product)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => handleDeleteProduct(product.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded bg-red-100 border border-red-200"></div>
-            <span className="text-muted-foreground">Sin stock (0)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded bg-orange-100 border border-orange-200"></div>
-            <span className="text-muted-foreground">Stock crítico (1-5)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded bg-yellow-100 border border-yellow-200"></div>
-            <span className="text-muted-foreground">Stock bajo (6-10)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded bg-green-100 border border-green-200"></div>
-            <span className="text-muted-foreground">Stock normal (&gt; 10)</span>
-          </div>
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <p>
+            Mostrando {paginatedProducts.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} a{" "}
+            {Math.min(currentPage * itemsPerPage, filteredProducts.length)} de {filteredProducts.length} productos
+            {filteredProducts.length !== data.products.length && ` (filtrados de ${data.products.length} totales)`}
+          </p>
         </div>
       </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={selectedIds.size === paginatedProducts.length && paginatedProducts.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                />
+              </TableHead>
+              <TableHead className="w-24">SKU</TableHead>
+              <TableHead className="min-w-[200px]">
+                <Button variant="ghost" size="sm" onClick={() => handleSort("name")} className="gap-1 px-0">
+                  Nombre
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button variant="ghost" size="sm" onClick={() => handleSort("color")} className="gap-1 px-0">
+                  Color
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button variant="ghost" size="sm" onClick={() => handleSort("model")} className="gap-1 px-0">
+                  Modelo
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button variant="ghost" size="sm" onClick={() => handleSort("stock")} className="gap-1 px-0">
+                  Stock
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              </TableHead>
+              <TableHead className="text-right">
+                <Button variant="ghost" size="sm" onClick={() => handleSort("unitPrice")} className="gap-1 px-0">
+                  Precio Unitario
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              </TableHead>
+              <TableHead>Última Venta</TableHead>
+              <TableHead className="text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedProducts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="h-24 text-center">
+                  No se encontraron productos
+                </TableCell>
+              </TableRow>
+            ) : (
+              paginatedProducts.map((product) => {
+                const stock = getAvailableStock(product.id, data)
+                const lastSaleDate = getLastSaleDate(product.id, data.sales)
+                return (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(product.id)}
+                        onCheckedChange={() => toggleSelectRow(product.id)}
+                      />
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{product.sku}</TableCell>
+                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell>{product.color}</TableCell>
+                    <TableCell>{product.model}</TableCell>
+                    <TableCell>
+                      <Badge className={getStockColor(stock)}>{stock}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">${product.defaultUnitPrice.toFixed(2)}</TableCell>
+                    <TableCell>{lastSaleDate ? new Date(lastSaleDate).toLocaleDateString("es-AR") : "-"}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => openEditProductDialog(product)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteProduct(product.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Página {currentPage} de {totalPages}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(1)}
+              disabled={currentPage === 1}
+              className="bg-transparent"
+            >
+              Primera
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="gap-1 bg-transparent"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = currentPage - 2 + i
+                }
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => goToPage(pageNum)}
+                    className={currentPage !== pageNum ? "bg-transparent" : ""}
+                  >
+                    {pageNum}
+                  </Button>
+                )
+              })}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="gap-1 bg-transparent"
+            >
+              Siguiente
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="bg-transparent"
+            >
+              Última
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Dialog open={isProductDialogOpen} onOpenChange={setIsProductDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -881,7 +897,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                   id="name"
                   value={productFormData.name}
                   onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })}
-                  placeholder="Ej: Black Airplane"
+                  placeholder="Ej: Funda iPhone 15 Pro"
                   required
                 />
               </div>
