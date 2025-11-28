@@ -196,9 +196,15 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     return data.products.filter(
       (product) =>
         product.name.toLowerCase().includes(search) ||
-        product.color?.toLowerCase().includes(search) ||
-        product.model?.toLowerCase().includes(search) ||
-        product.sku?.toLowerCase().includes(search),
+        String(product.color || "")
+          .toLowerCase()
+          .includes(search) ||
+        String(product.model || "")
+          .toLowerCase()
+          .includes(search) ||
+        String(product.sku || "")
+          .toLowerCase()
+          .includes(search),
     )
   }, [data.products, stockProductSearch])
 
