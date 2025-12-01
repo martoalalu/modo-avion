@@ -35,6 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
 
 const PRELOADE_IPHONE_MODELS = [
   "16 PRO MAX",
@@ -51,10 +52,11 @@ const PRELOADE_IPHONE_MODELS = [
   "11",
 ]
 
-const ITEMS_PER_PAGE = 50 // Show 50 items per page for better performance
-const PAGE_SIZE_OPTIONS = [25, 50, 100, 200]
+const ITEMS_PER_PAGE = 20 // Show 20 items per page for better performance
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200]
 
 export function InventarioSection({ data, updateData }: InventarioSectionProps) {
+  const { toast } = useToast()
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false)
   const [isStockDialogOpen, setIsStockDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -76,6 +78,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     model: "",
     color: "",
     defaultUnitPrice: "",
+    currentStock: "",
   })
 
   const [stockFormData, setStockFormData] = useState({
@@ -226,7 +229,15 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
 
   const openCreateProductDialog = () => {
     setEditingProduct(null)
-    setProductFormData({ name: "", sku: "", category: "", model: "", color: "", defaultUnitPrice: "" })
+    setProductFormData({
+      name: "",
+      sku: "",
+      category: "",
+      model: "",
+      color: "",
+      defaultUnitPrice: "",
+      currentStock: "",
+    })
     setIsCustomModel(false)
     setCustomModel("")
     setVariants([])
@@ -242,6 +253,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
 
   const openEditProductDialog = (product: Product) => {
     setEditingProduct(product)
+    const currentStock = getAvailableStock(product.id, data) // Get current stock for editing
     setProductFormData({
       name: product.name,
       sku: product.sku || "",
@@ -249,6 +261,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
       model: product.model || "",
       color: product.color || "",
       defaultUnitPrice: product.defaultUnitPrice.toString(),
+      currentStock: currentStock.toString(),
     })
     setIsCustomModel(false)
     setCustomModel("")
@@ -325,7 +338,31 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
             }
           : p,
       )
-      updateData({ ...data, products: updatedProducts })
+
+      const currentStock = getAvailableStock(editingProduct.id, data)
+      const newStock = Number.parseInt(productFormData.currentStock) || 0
+      const stockDifference = newStock - currentStock
+
+      const updatedStockMovements = [...(data.stockMovements || [])]
+
+      if (stockDifference !== 0) {
+        // Create an adjustment stock movement
+        const adjustmentEntry: StockMovement = {
+          id: `stock-adj-${Date.now()}-${Math.random()}`,
+          productId: editingProduct.id,
+          quantity: stockDifference,
+          date: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        }
+        updatedStockMovements.push(adjustmentEntry)
+      }
+
+      updateData({ ...data, products: updatedProducts, stockMovements: updatedStockMovements })
+
+      toast({
+        title: "Cambios guardados",
+        description: "El producto ha sido actualizado correctamente.",
+      })
     } else {
       if (variants.length > 0) {
         const newProducts: Product[] = []
@@ -411,7 +448,15 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
 
     setInitialStock("0")
     setIsProductDialogOpen(false)
-    setProductFormData({ name: "", sku: "", category: "", model: "", color: "", defaultUnitPrice: "" })
+    setProductFormData({
+      name: "",
+      sku: "",
+      category: "",
+      model: "",
+      color: "",
+      defaultUnitPrice: "",
+      currentStock: "",
+    })
     setIsCustomModel(false)
     setCustomModel("")
     setVariants([])
@@ -946,6 +991,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
 
               {editingProduct && (
                 <>
+                  {/* Removed duplicate currentStock field */}
                   <div className="space-y-2">
                     <Label htmlFor="edit-color">Color (Opcional)</Label>
                     <Select
@@ -1046,6 +1092,21 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                       placeholder="0.00"
                       required
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-stock">Stock Actual</Label>
+                    <Input
+                      id="edit-stock"
+                      type="number"
+                      min="0"
+                      value={productFormData.currentStock}
+                      onChange={(e) => setProductFormData({ ...productFormData, currentStock: e.target.value })}
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Modifique el stock si hubo un error. Se creará un ajuste automático.
+                    </p>
                   </div>
                 </>
               )}
