@@ -35,6 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast"
 
 const PRELOADE_IPHONE_MODELS = [
   "16 PRO MAX",
@@ -51,10 +52,11 @@ const PRELOADE_IPHONE_MODELS = [
   "11",
 ]
 
-const ITEMS_PER_PAGE = 50 // Show 50 items per page for better performance
-const PAGE_SIZE_OPTIONS = [25, 50, 100, 200]
+const ITEMS_PER_PAGE = 20 // Show 20 items per page for better performance
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200]
 
 export function InventarioSection({ data, updateData }: InventarioSectionProps) {
+  const { toast } = useToast()
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false)
   const [isStockDialogOpen, setIsStockDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -356,6 +358,11 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
       }
 
       updateData({ ...data, products: updatedProducts, stockMovements: updatedStockMovements })
+
+      toast({
+        title: "Cambios guardados",
+        description: "El producto ha sido actualizado correctamente.",
+      })
     } else {
       if (variants.length > 0) {
         const newProducts: Product[] = []
