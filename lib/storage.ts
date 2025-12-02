@@ -40,3 +40,12 @@ export function generateSKU(data: AppData): string {
   const maxNumber = existingSkus.length > 0 ? Math.max(...existingSkus) : 0
   return `SKU-${String(maxNumber + 1).padStart(4, "0")}`
 }
+
+export function getTotalUnitsSold(productId: string, data: AppData): number {
+  const sales = data?.sales || []
+
+  return sales
+    .flatMap((s) => s.items || [])
+    .filter((item) => item.productId === productId)
+    .reduce((sum, item) => sum + item.quantity, 0)
+}

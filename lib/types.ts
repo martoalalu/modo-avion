@@ -46,3 +46,11 @@ export interface AppData {
   stockMovements: StockMovement[]
   sales: Sale[]
 }
+
+export interface InventarioSectionProps {
+  data: AppData
+  updateData: (data: AppData) => void
+}
+
+export type SortField = "name" | "stock" | "model" | "unitPrice" | "color" | "totalSold"
+export type SortDirection = "asc" | "desc"
