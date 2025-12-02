@@ -150,7 +150,7 @@ function ProductSearchDropdown({
           <div className="p-2">
             <Input
               ref={inputRef}
-              placeholder="Buscar por nombre, color, modelo o SKU..."
+              placeholder="Buscar por nombre, color o modelo..."
               value={search}
               onChange={handleSearchChange}
               className="h-9"
@@ -176,12 +176,20 @@ function ProductSearchDropdown({
                     onClick={() => handleProductSelect(product.id)}
                   >
                     <Check className={cn("mr-2 h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
-                    <div className="flex flex-col">
-                      <div className="font-medium">{product.name || "Sin nombre"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {product.color && `${product.color}`}
-                        {product.model && ` • ${product.model}`}
-                        {` • Stock: ${stock}`}
+                    <div className="flex flex-col flex-1">
+                      <div className="font-medium">
+                        {product.name || "Sin nombre"}
+                        {product.model && <span className="ml-1 text-muted-foreground">({product.model})</span>}
+                      </div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-2">
+                        {product.color && (
+                          <span className="inline-flex items-center">
+                            <span className="font-medium">Color:</span> {product.color}
+                          </span>
+                        )}
+                        <span className="inline-flex items-center">
+                          <span className="font-medium">Stock:</span> {stock}
+                        </span>
                       </div>
                     </div>
                   </div>
