@@ -38,23 +38,25 @@ function filterProducts(products: Product[] | undefined | null, searchTerm: stri
     return products.slice(0, 5)
   }
 
+  const searchWords = searchLower.split(/\s+/).filter((word) => word.length > 0)
+
   const results: Product[] = []
   for (let i = 0; i < products.length && results.length < 5; i++) {
     const product = products[i]
     if (!product || typeof product !== "object") continue
 
     try {
+      // Concatenate name, color, model into a single searchable string
       const name = String(product.name || "").toLowerCase()
       const color = String(product.color || "").toLowerCase()
       const model = String(product.model || "").toLowerCase()
-      const sku = String(product.sku || "").toLowerCase()
 
-      if (
-        name.includes(searchLower) ||
-        color.includes(searchLower) ||
-        model.includes(searchLower) ||
-        sku.includes(searchLower)
-      ) {
+      const combinedText = `${name} ${color} ${model}`
+
+      // Check if ALL search words are found in the combined text
+      const allWordsMatch = searchWords.every((word) => combinedText.includes(word))
+
+      if (allWordsMatch) {
         results.push(product)
       }
     } catch {
