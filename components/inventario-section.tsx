@@ -65,6 +65,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
   const [filterStock, setFilterStock] = useState<string[]>([])
   const [filterCategory, setFilterCategory] = useState("all")
   const [filterColor, setFilterColor] = useState<string[]>([])
+  const [filterTotalSold, setFilterTotalSold] = useState<string[]>([])
   const [sortField, setSortField] = useState<SortField>("stock")
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
 
@@ -124,7 +125,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, filterModel, filterCategory, filterColor, filterStock])
+  }, [searchTerm, filterModel, filterCategory, filterColor, filterStock, filterTotalSold])
 
   const filteredProducts = useMemo(() => {
     const result = data.products.filter((product) => {
@@ -158,7 +159,27 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
         })
       })()
 
-      return matchesSearch && matchesModel && matchesCategory && matchesColor && matchesStockFilter
+      const matchesTotalSoldFilter = (() => {
+        if (filterTotalSold.length === 0) return true
+
+        const totalSold = getTotalUnitsSold(product.id, data)
+        return filterTotalSold.some((level) => {
+          switch (level) {
+            case "zero":
+              return totalSold === 0
+            case "low":
+              return totalSold >= 1 && totalSold <= 10
+            case "high":
+              return totalSold > 10
+            default:
+              return false
+          }
+        })
+      })()
+
+      return (
+        matchesSearch && matchesModel && matchesCategory && matchesColor && matchesStockFilter && matchesTotalSoldFilter
+      )
     })
 
     // Apply sorting
@@ -185,7 +206,17 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
     })
 
     return result
-  }, [data, searchTerm, filterModel, filterCategory, filterColor, filterStock, sortField, sortDirection])
+  }, [
+    data,
+    searchTerm,
+    filterModel,
+    filterCategory,
+    filterColor,
+    filterStock,
+    filterTotalSold,
+    sortField,
+    sortDirection,
+  ])
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
   const paginatedProducts = useMemo(() => {
@@ -752,6 +783,57 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
             </DropdownMenu>
           </div>
 
+          {/* Add Total Sold Filter Here */}
+          <div className="space-y-2">
+            <Label htmlFor="filter-total-sold" className="text-sm">
+              Filtrar por Total Vendido
+            </Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-between bg-transparent">
+                  {filterTotalSold.length === 0
+                    ? "Todos los totales"
+                    : `${filterTotalSold.length} seleccionado${filterTotalSold.length > 1 ? "s" : ""}`}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56">
+                {filterTotalSold.length > 0 && (
+                  <>
+                    <DropdownMenuItem onClick={() => setFilterTotalSold([])}>Limpiar filtro</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setFilterTotalSold(toggleFilter(filterTotalSold, "zero"))
+                  }}
+                >
+                  <Checkbox checked={filterTotalSold.includes("zero")} className="mr-2" />
+                  Cero ventas (0)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setFilterTotalSold(toggleFilter(filterTotalSold, "low"))
+                  }}
+                >
+                  <Checkbox checked={filterTotalSold.includes("low")} className="mr-2" />
+                  Bajo (1-10)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setFilterTotalSold(toggleFilter(filterTotalSold, "high"))
+                  }}
+                >
+                  <Checkbox checked={filterTotalSold.includes("high")} className="mr-2" />
+                  Alto (10+)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="items-per-page" className="text-sm">
               Productos por página
@@ -858,7 +940,15 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                     </TableCell>
                     <TableCell className="text-right">${product.defaultUnitPrice.toFixed(2)}</TableCell>
                     <TableCell>{lastSaleDate ? new Date(lastSaleDate).toLocaleDateString("es-AR") : "-"}</TableCell>
-                    <TableCell className="text-right">{totalSold}</TableCell>
+                    <TableCell className="text-right">
+                      {totalSold === 0 ? (
+                        <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 font-medium">
+                          {totalSold}
+                        </span>
+                      ) : (
+                        totalSold
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="sm" onClick={() => openEditProductDialog(product)}>
