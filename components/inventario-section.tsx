@@ -18,7 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Pencil, Trash2, ArrowUpDown, X, ChevronLeft, ChevronRight } from "lucide-react"
-import { generateId, getAvailableStock, getLastSaleDate, generateSKU } from "@/lib/storage"
+import { generateId, getAvailableStock, getLastSaleDate, generateSKU, getTotalUnitsSold } from "@/lib/storage"
 import type {
   Product,
   StockMovement,
@@ -819,13 +819,14 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                 </Button>
               </TableHead>
               <TableHead>Última Venta</TableHead>
+              <TableHead className="text-right">Total Vendido</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
+                <TableCell colSpan={9} className="h-24 text-center">
                   No se encontraron productos
                 </TableCell>
               </TableRow>
@@ -833,6 +834,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
               paginatedProducts.map((product) => {
                 const stock = getAvailableStock(product.id, data)
                 const lastSaleDate = getLastSaleDate(product.id, data.sales)
+                const totalSold = getTotalUnitsSold(product.id, data)
                 return (
                   <TableRow key={product.id}>
                     <TableCell>
@@ -849,6 +851,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                     </TableCell>
                     <TableCell className="text-right">${product.defaultUnitPrice.toFixed(2)}</TableCell>
                     <TableCell>{lastSaleDate ? new Date(lastSaleDate).toLocaleDateString("es-AR") : "-"}</TableCell>
+                    <TableCell className="text-right">{totalSold}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="sm" onClick={() => openEditProductDialog(product)}>
