@@ -172,11 +172,13 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
       } else if (sortField === "model") {
         const modelA = a.model || ""
         const modelB = b.model || ""
-        comparison = modelA.localeCompare(modelB)
+        comparison = String(modelA).localeCompare(String(modelB))
       } else if (sortField === "unitPrice") {
         comparison = a.defaultUnitPrice - b.defaultUnitPrice
       } else if (sortField === "color") {
-        comparison = a.color.localeCompare(b.color)
+        comparison = (a.color || "").localeCompare(b.color || "")
+      } else if (sortField === "totalSold") {
+        comparison = getTotalUnitsSold(a.id, data) - getTotalUnitsSold(b.id, data)
       }
 
       return sortDirection === "asc" ? comparison : -comparison
@@ -819,7 +821,12 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
                 </Button>
               </TableHead>
               <TableHead>Última Venta</TableHead>
-              <TableHead className="text-right">Total Vendido</TableHead>
+              <TableHead className="text-right">
+                <Button variant="ghost" size="sm" onClick={() => handleSort("totalSold")} className="gap-1 px-0">
+                  Total Vendido
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              </TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>

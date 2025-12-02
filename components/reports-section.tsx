@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChevronDown, ChevronUp, Plus, Pencil, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronUp, Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
 import type { AppData, Sale } from "@/lib/types"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { SalesForm } from "@/components/sales-form"
@@ -46,6 +46,8 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
   const [showLowStockOnly, setShowLowStockOnly] = useState(false)
   const [sortField, setSortField] = useState<SortField>("stock")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
+  const [transactionsPage, setTransactionsPage] = useState(1)
+  const TRANSACTIONS_PER_PAGE = 10
 
   const filteredSalesByDay = useMemo(() => {
     const filteredSales = data.sales.filter((sale) => {
@@ -190,9 +192,19 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
     })
   }, [data.sales, dateFrom, dateTo])
 
-  const recentSales = [...filteredSales]
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 50)
+  const recentSales = useMemo(() => {
+    return [...filteredSales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [filteredSales])
+
+  const totalTransactionPages = Math.ceil(recentSales.length / TRANSACTIONS_PER_PAGE)
+  const paginatedSales = useMemo(() => {
+    const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE
+    return recentSales.slice(startIndex, startIndex + TRANSACTIONS_PER_PAGE)
+  }, [recentSales, transactionsPage])
+
+  useMemo(() => {
+    setTransactionsPage(1)
+  }, [dateFrom, dateTo])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -261,80 +273,6 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
             Registrar Venta
           </Button>
         </div>
-
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle>Resumen de Ventas por Día</CardTitle>
-                <CardDescription>Cantidad de ventas y monto total por día</CardDescription>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="summary-date-from" className="whitespace-nowrap text-sm">
-                    Desde:
-                  </Label>
-                  <Input
-                    id="summary-date-from"
-                    type="date"
-                    value={summaryDateFrom}
-                    onChange={(e) => setSummaryDateFrom(e.target.value)}
-                    className="w-full sm:w-auto"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="summary-date-to" className="whitespace-nowrap text-sm">
-                    Hasta:
-                  </Label>
-                  <Input
-                    id="summary-date-to"
-                    type="date"
-                    value={summaryDateTo}
-                    onChange={(e) => setSummaryDateTo(e.target.value)}
-                    className="w-full sm:w-auto"
-                  />
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead className="text-right">Cantidad de Ventas</TableHead>
-                    <TableHead className="text-right">Monto Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSalesByDay.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        No hay ventas registradas en el período seleccionado
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    <>
-                      {filteredSalesByDay.map((day) => (
-                        <TableRow key={day.date}>
-                          <TableCell className="font-medium">{formatTableDate(day.date)}</TableCell>
-                          <TableCell className="text-right">{day.count}</TableCell>
-                          <TableCell className="text-right">${day.total.toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="bg-muted/50 font-bold">
-                        <TableCell>Total</TableCell>
-                        <TableCell className="text-right">{summaryTotals.count}</TableCell>
-                        <TableCell className="text-right">${summaryTotals.total.toFixed(2)}</TableCell>
-                      </TableRow>
-                    </>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
 
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
@@ -413,6 +351,80 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
           <CardHeader>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
+                <CardTitle>Resumen de Ventas por Día</CardTitle>
+                <CardDescription>Cantidad de ventas y monto total por día</CardDescription>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="summary-date-from" className="whitespace-nowrap text-sm">
+                    Desde:
+                  </Label>
+                  <Input
+                    id="summary-date-from"
+                    type="date"
+                    value={summaryDateFrom}
+                    onChange={(e) => setSummaryDateFrom(e.target.value)}
+                    className="w-full sm:w-auto"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="summary-date-to" className="whitespace-nowrap text-sm">
+                    Hasta:
+                  </Label>
+                  <Input
+                    id="summary-date-to"
+                    type="date"
+                    value={summaryDateTo}
+                    onChange={(e) => setSummaryDateTo(e.target.value)}
+                    className="w-full sm:w-auto"
+                  />
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead className="text-right">Cantidad de Ventas</TableHead>
+                    <TableHead className="text-right">Monto Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredSalesByDay.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        No hay ventas registradas en el período seleccionado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <>
+                      {filteredSalesByDay.map((day) => (
+                        <TableRow key={day.date}>
+                          <TableCell className="font-medium">{formatTableDate(day.date)}</TableCell>
+                          <TableCell className="text-right">{day.count}</TableCell>
+                          <TableCell className="text-right">${day.total.toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="bg-muted/50 font-bold">
+                        <TableCell>Total</TableCell>
+                        <TableCell className="text-right">{summaryTotals.count}</TableCell>
+                        <TableCell className="text-right">${summaryTotals.total.toFixed(2)}</TableCell>
+                      </TableRow>
+                    </>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
                 <CardTitle>Transacciones</CardTitle>
                 <CardDescription>Ventas registradas filtradas por fecha</CardDescription>
               </div>
@@ -458,14 +470,14 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentSales.length === 0 ? (
+                  {paginatedSales.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground">
                         No hay ventas registradas en el período seleccionado
                       </TableCell>
                     </TableRow>
                   ) : (
-                    recentSales.map((sale) => (
+                    paginatedSales.map((sale) => (
                       <>
                         <TableRow key={sale.id}>
                           <TableCell
@@ -553,6 +565,37 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
                 </TableBody>
               </Table>
             </div>
+
+            {totalTransactionPages > 1 && (
+              <div className="flex items-center justify-between mt-4">
+                <p className="text-sm text-muted-foreground">
+                  Mostrando {(transactionsPage - 1) * TRANSACTIONS_PER_PAGE + 1} -{" "}
+                  {Math.min(transactionsPage * TRANSACTIONS_PER_PAGE, recentSales.length)} de {recentSales.length}{" "}
+                  transacciones
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTransactionsPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={transactionsPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm">
+                    Página {transactionsPage} de {totalTransactionPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTransactionsPage((prev) => Math.min(prev + 1, totalTransactionPages))}
+                    disabled={transactionsPage === totalTransactionPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
