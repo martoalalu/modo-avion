@@ -359,10 +359,7 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
 
       updateData({ ...data, products: updatedProducts, stockMovements: updatedStockMovements })
 
-      toast({
-        title: "Cambios guardados",
-        description: "El producto ha sido actualizado correctamente.",
-      })
+      alert("Cambios guardados exitosamente")
     } else {
       if (variants.length > 0) {
         const newProducts: Product[] = []
