@@ -177,6 +177,29 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
         })
       })()
 
+      if (product.name.includes("FIBRA DE CARBONO") || product.name.includes("CARBONO")) {
+        const stock = getAvailableStock(product.id, data)
+        console.log("[v0] CARBONO product filter check:", {
+          name: product.name,
+          id: product.id,
+          stock,
+          filterStock,
+          matchesStockFilter,
+          matchesSearch,
+          matchesModel,
+          matchesCategory,
+          matchesColor,
+          matchesTotalSoldFilter,
+          allMatch:
+            matchesSearch &&
+            matchesModel &&
+            matchesCategory &&
+            matchesColor &&
+            matchesStockFilter &&
+            matchesTotalSoldFilter,
+        })
+      }
+
       return (
         matchesSearch && matchesModel && matchesCategory && matchesColor && matchesStockFilter && matchesTotalSoldFilter
       )
