@@ -33,10 +33,17 @@ export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
   const [dateTo, setDateTo] = useState(() => {
     return new Date().toISOString().split("T")[0]
   })
-  const [searchTerm, setSearchTerm] = useState("")
 
-  const [sortField, setSortField] = useState<SortField>("date")
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
+  const [transDateFrom, setTransDateFrom] = useState(() => {
+    const twoDaysAgo = new Date()
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
+    return twoDaysAgo.toISOString().split("T")[0]
+  })
+  const [transDateTo, setTransDateTo] = useState(() => {
+    return new Date().toISOString().split("T")[0]
+  })
+
+  const [searchTerm, setSearchTerm] = useState("")
 
   const filteredSalesByDay = useMemo(() => {
     const filteredSales = data.sales.filter((sale) => {
@@ -147,6 +154,45 @@ export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
     const [year, month, day] = dateStr.split("-")
     return `${day}/${month}/${year}`
   }
+
+  const filteredTransactions = useMemo(() => {
+    return data.sales
+      .filter((sale) => {
+        const saleDateOnly = new Date(sale.date)
+          .toLocaleDateString("es-AR", {
+            timeZone: "America/Argentina/Buenos_Aires",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          })
+          .split("/")
+          .reverse()
+          .join("-")
+
+        const dateMatch = saleDateOnly >= transDateFrom && saleDateOnly <= transDateTo
+
+        if (!dateMatch) return false
+
+        if (searchTerm) {
+          const searchLower = searchTerm.toLowerCase()
+          const hasMatchingProduct = sale.items.some((item) => {
+            const product = data.products.find((p) => p.id === item.productId)
+            return product?.name.toLowerCase().includes(searchLower)
+          })
+          return hasMatchingProduct
+        }
+
+        return true
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [data.sales, data.products, transDateFrom, transDateTo, searchTerm])
+
+  const paginatedTransactions = useMemo(() => {
+    const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE
+    return filteredTransactions.slice(startIndex, startIndex + TRANSACTIONS_PER_PAGE)
+  }, [filteredTransactions, transactionsPage])
+
+  const totalTransactionPages = Math.ceil(filteredTransactions.length / TRANSACTIONS_PER_PAGE)
 
   return (
     <>
@@ -302,18 +348,51 @@ export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
           </CardContent>
         </Card>
 
-        {/* Transacciones section - removed its own date filter */}
+        {/* Transacciones section */}
         <Card>
           <CardHeader>
             <CardTitle>Transacciones</CardTitle>
             <CardDescription>Historial de ventas realizadas</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="mb-4">
+            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="trans-date-from" className="whitespace-nowrap text-sm">
+                  Desde:
+                </Label>
+                <Input
+                  id="trans-date-from"
+                  type="date"
+                  value={transDateFrom}
+                  onChange={(e) => {
+                    setTransDateFrom(e.target.value)
+                    setTransactionsPage(1)
+                  }}
+                  className="w-full sm:w-auto"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="trans-date-to" className="whitespace-nowrap text-sm">
+                  Hasta:
+                </Label>
+                <Input
+                  id="trans-date-to"
+                  type="date"
+                  value={transDateTo}
+                  onChange={(e) => {
+                    setTransDateTo(e.target.value)
+                    setTransactionsPage(1)
+                  }}
+                  className="w-full sm:w-auto"
+                />
+              </div>
               <Input
                 placeholder="Buscar por producto..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setTransactionsPage(1)
+                }}
                 className="max-w-sm"
               />
             </div>
@@ -329,16 +408,50 @@ export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>{/* Placeholder for sales table rows */}</TableBody>
+                <TableBody>
+                  {paginatedTransactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                        No hay transacciones en el período seleccionado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    paginatedTransactions.map((sale) => (
+                      <TableRow key={sale.id}>
+                        <TableCell></TableCell>
+                        <TableCell>
+                          {new Date(sale.date).toLocaleDateString("es-AR", {
+                            timeZone: "America/Argentina/Buenos_Aires",
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </TableCell>
+                        <TableCell>{sale.paymentMethod}</TableCell>
+                        <TableCell className="text-right">
+                          {sale.items.reduce((sum, item) => sum + item.quantity, 0)}
+                        </TableCell>
+                        <TableCell className="text-right">${sale.totalAmount.toLocaleString("es-AR")}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm">
+                            Ver
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
               </Table>
             </div>
 
-            {data.sales.length > TRANSACTIONS_PER_PAGE && (
+            {filteredTransactions.length > TRANSACTIONS_PER_PAGE && (
               <div className="flex items-center justify-between mt-4">
                 <p className="text-sm text-muted-foreground">
                   Mostrando {(transactionsPage - 1) * TRANSACTIONS_PER_PAGE + 1} -{" "}
-                  {Math.min(transactionsPage * TRANSACTIONS_PER_PAGE, data.sales.length)} de {data.sales.length}{" "}
-                  transacciones
+                  {Math.min(transactionsPage * TRANSACTIONS_PER_PAGE, filteredTransactions.length)} de{" "}
+                  {filteredTransactions.length} transacciones
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
@@ -350,17 +463,13 @@ export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <span className="text-sm">
-                    Página {transactionsPage} de {Math.ceil(data.sales.length / TRANSACTIONS_PER_PAGE)}
+                    Página {transactionsPage} de {totalTransactionPages}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      setTransactionsPage((prev) =>
-                        Math.min(prev + 1, Math.ceil(data.sales.length / TRANSACTIONS_PER_PAGE)),
-                      )
-                    }
-                    disabled={transactionsPage === Math.ceil(data.sales.length / TRANSACTIONS_PER_PAGE)}
+                    onClick={() => setTransactionsPage((prev) => Math.min(prev + 1, totalTransactionPages))}
+                    disabled={transactionsPage === totalTransactionPages}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
