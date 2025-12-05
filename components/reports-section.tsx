@@ -4,27 +4,26 @@ import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, ChevronLeft, ChevronRight } from "lucide-react"
-import type { AppData } from "@/lib/types"
+import { ChevronDown, ChevronUp, Pencil, Trash2, ChevronLeft, ChevronRight, Calendar } from "lucide-react"
+import type { AppData, Sale, SortField } from "@/lib/types"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { SalesForm } from "./sales-form"
+import { SalesForm } from "@/components/sales-form"
+import { getAvailableStock, getLastSaleDate } from "@/lib/storage"
 
 interface ReportsSectionProps {
   data: AppData
-  onSaleComplete: () => void
+  onAddSale: (sale: Sale) => void
+  onRefresh: () => void
 }
 
-type SortField = "date" | "product" | "quantity" | "amount"
-type SortDirection = "asc" | "desc"
-
-export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
+export function ReportsSection({ data, onAddSale, onRefresh }: ReportsSectionProps) {
+  const [expandedSale, setExpandedSale] = useState<string | null>(null)
   const [isSalesModalOpen, setIsSalesModalOpen] = useState(false)
-  const [transactionsPage, setTransactionsPage] = useState(1)
-  const TRANSACTIONS_PER_PAGE = 10
-
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editingSale, setEditingSale] = useState<Sale | null>(null)
   const [dateFrom, setDateFrom] = useState(() => {
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
@@ -33,17 +32,20 @@ export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
   const [dateTo, setDateTo] = useState(() => {
     return new Date().toISOString().split("T")[0]
   })
-
   const [transDateFrom, setTransDateFrom] = useState(() => {
-    const twoDaysAgo = new Date()
-    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
-    return twoDaysAgo.toISOString().split("T")[0]
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    return sevenDaysAgo.toISOString().split("T")[0]
   })
   const [transDateTo, setTransDateTo] = useState(() => {
     return new Date().toISOString().split("T")[0]
   })
-
   const [searchTerm, setSearchTerm] = useState("")
+  const [showLowStockOnly, setShowLowStockOnly] = useState(false)
+  const [sortField, setSortField] = useState<SortField>("stock")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
+  const [transactionsPage, setTransactionsPage] = useState(1)
+  const TRANSACTIONS_PER_PAGE = 10
 
   const filteredSalesByDay = useMemo(() => {
     const filteredSales = data.sales.filter((sale) => {
@@ -87,17 +89,6 @@ export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
     return Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date))
   }, [data.sales, dateFrom, dateTo])
 
-  const summaryTotals = useMemo(() => {
-    return filteredSalesByDay.reduce(
-      (acc, day) => {
-        acc.count += day.count
-        acc.total += day.total
-        return acc
-      },
-      { count: 0, total: 0 },
-    )
-  }, [filteredSalesByDay])
-
   const salesByDay = useMemo(() => {
     const filteredSales = data.sales.filter((sale) => {
       const saleDateOnly = new Date(sale.date)
@@ -140,7 +131,127 @@ export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
     return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date))
   }, [data.sales, dateFrom, dateTo])
 
-  const formatChartDate = (dateStr: string) => {
+  const filteredSales = useMemo(() => {
+    return data.sales.filter((sale) => {
+      const saleDateOnly = new Date(sale.date)
+        .toLocaleDateString("es-AR", {
+          timeZone: "America/Argentina/Buenos_Aires",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+        .split("/")
+        .reverse()
+        .join("-")
+
+      return saleDateOnly >= transDateFrom && saleDateOnly <= transDateTo
+    })
+  }, [data.sales, transDateFrom, transDateTo])
+
+  const recentSales = useMemo(() => {
+    return [...filteredSales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [filteredSales])
+
+  const totalTransactionPages = Math.ceil(recentSales.length / TRANSACTIONS_PER_PAGE)
+  const paginatedSales = useMemo(() => {
+    const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE
+    return recentSales.slice(startIndex, startIndex + TRANSACTIONS_PER_PAGE)
+  }, [recentSales, transactionsPage])
+
+  const inventory = useMemo(() => {
+    return data.products.map((product) => {
+      const stock = getAvailableStock(product.id, data)
+      const lastSale = getLastSaleDate(product.id, data)
+
+      return {
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        model: product.model,
+        stock,
+        lastSale,
+      }
+    })
+  }, [data])
+
+  const filteredInventory = useMemo(() => {
+    const result = inventory.filter((item) => {
+      const matchesSearch =
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))
+
+      const matchesFilter = !showLowStockOnly || item.stock < 10
+
+      return matchesSearch && matchesFilter
+    })
+
+    result.sort((a, b) => {
+      let comparison = 0
+
+      if (sortField === "name") {
+        comparison = a.name.localeCompare(b.name)
+      } else if (sortField === "stock") {
+        comparison = a.stock - b.stock
+      } else if (sortField === "model") {
+        const modelA = a.model || ""
+        const modelB = b.model || ""
+        comparison = modelA.localeCompare(modelB)
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison
+    })
+
+    return result
+  }, [inventory, searchTerm, showLowStockOnly, sortField, sortDirection])
+
+  useMemo(() => {
+    setTransactionsPage(1)
+  }, [transDateFrom, transDateTo])
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDirection("asc")
+    }
+  }
+
+  const getStockColor = (stock: number) => {
+    if (stock < 10) return "text-red-600 bg-red-50"
+    if (stock <= 20) return "text-orange-600 bg-orange-50"
+    return "text-green-600 bg-green-50"
+  }
+
+  const handleEditSale = (sale: Sale) => {
+    setEditingSale(sale)
+    setIsEditModalOpen(true)
+  }
+
+  const handleDeleteSale = (saleId: string) => {
+    if (confirm("¿Está seguro que desea eliminar esta transacción?")) {
+      const updatedSales = data.sales.filter((s) => s.id !== saleId)
+      const newData = { ...data, sales: updatedSales }
+      onRefresh()
+    }
+  }
+
+  const getPaymentMethodColor = (method: string) => {
+    switch (method) {
+      case "efectivo":
+        return "bg-green-50 text-green-700 border-green-200"
+      case "tarjeta":
+        return "bg-blue-50 text-blue-700 border-blue-200"
+      case "transferencia":
+        return "bg-purple-50 text-purple-700 border-purple-200"
+      case "qr":
+        return "bg-orange-50 text-orange-700 border-orange-200"
+      default:
+        return "bg-gray-50 text-gray-700 border-gray-200"
+    }
+  }
+
+  const formatDate = (dateStr: string) => {
     const [year, month, day] = dateStr.split("-")
     return `${day}/${month}`
   }
@@ -155,341 +266,355 @@ export function ReportsSection({ data, onSaleComplete }: ReportsSectionProps) {
     return `${day}/${month}/${year}`
   }
 
-  const filteredTransactions = useMemo(() => {
-    return data.sales
-      .filter((sale) => {
-        const saleDateOnly = new Date(sale.date)
-          .toLocaleDateString("es-AR", {
-            timeZone: "America/Argentina/Buenos_Aires",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          })
-          .split("/")
-          .reverse()
-          .join("-")
-
-        const dateMatch = saleDateOnly >= transDateFrom && saleDateOnly <= transDateTo
-
-        if (!dateMatch) return false
-
-        if (searchTerm) {
-          const searchLower = searchTerm.toLowerCase()
-          const hasMatchingProduct = sale.items.some((item) => {
-            const product = data.products.find((p) => p.id === item.productId)
-            return product?.name.toLowerCase().includes(searchLower)
-          })
-          return hasMatchingProduct
-        }
-
-        return true
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [data.sales, data.products, transDateFrom, transDateTo, searchTerm])
-
-  const paginatedTransactions = useMemo(() => {
-    const startIndex = (transactionsPage - 1) * TRANSACTIONS_PER_PAGE
-    return filteredTransactions.slice(startIndex, startIndex + TRANSACTIONS_PER_PAGE)
-  }, [filteredTransactions, transactionsPage])
-
-  const totalTransactionPages = Math.ceil(filteredTransactions.length / TRANSACTIONS_PER_PAGE)
-
   return (
-    <>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4">
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
-              <Label htmlFor="date-from" className="whitespace-nowrap text-sm">
-                Desde:
-              </Label>
-              <Input
-                id="date-from"
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full sm:w-auto"
-              />
+              <Calendar className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-lg">Filtro de Fechas</CardTitle>
             </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="date-to" className="whitespace-nowrap text-sm">
-                Hasta:
-              </Label>
-              <Input
-                id="date-to"
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="w-full sm:w-auto"
-              />
-            </div>
-          </div>
-          <Button onClick={() => setIsSalesModalOpen(true)} size="lg">
-            <Plus className="mr-2 h-4 w-4" />
-            Registrar Venta
-          </Button>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Cantidad de Ventas por Día</CardTitle>
-              <CardDescription>Número de transacciones diarias</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {salesByDay.length === 0 ? (
-                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                  No hay datos de ventas para mostrar
-                </div>
-              ) : (
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={salesByDay}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tickFormatter={formatChartDate} />
-                      <YAxis />
-                      <Tooltip labelFormatter={formatChartDateFull} />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="count"
-                        stroke="#3b82f6"
-                        strokeWidth={2}
-                        name="Cantidad de Ventas"
-                        dot={{ fill: "#3b82f6" }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Monto Total por Día</CardTitle>
-              <CardDescription>Ingresos diarios totales</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {salesByDay.length === 0 ? (
-                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                  No hay datos de ventas para mostrar
-                </div>
-              ) : (
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={salesByDay}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tickFormatter={formatChartDate} />
-                      <YAxis />
-                      <Tooltip
-                        labelFormatter={formatChartDateFull}
-                        formatter={(value: number) => `$${value.toLocaleString("es-AR")}`}
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="total"
-                        stroke="#10b981"
-                        strokeWidth={2}
-                        name="Monto Total"
-                        dot={{ fill: "#10b981" }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Resumen de Ventas por Día table - removed its own date filter */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Resumen de Ventas por Día</CardTitle>
-            <CardDescription>Cantidad y monto total de ventas agrupadas por fecha</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead className="text-right">Cantidad de Ventas</TableHead>
-                    <TableHead className="text-right">Monto Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSalesByDay.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        No hay ventas en el período seleccionado
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    <>
-                      {filteredSalesByDay.map((day) => (
-                        <TableRow key={day.date}>
-                          <TableCell>{formatTableDate(day.date)}</TableCell>
-                          <TableCell className="text-right">{day.count}</TableCell>
-                          <TableCell className="text-right">${day.total.toLocaleString("es-AR")}</TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="bg-muted/50 font-medium">
-                        <TableCell>Total</TableCell>
-                        <TableCell className="text-right">{summaryTotals.count}</TableCell>
-                        <TableCell className="text-right">${summaryTotals.total.toLocaleString("es-AR")}</TableCell>
-                      </TableRow>
-                    </>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Transacciones section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Transacciones</CardTitle>
-            <CardDescription>Historial de ventas realizadas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="flex items-center gap-2">
-                <Label htmlFor="trans-date-from" className="whitespace-nowrap text-sm">
+                <Label htmlFor="main-date-from" className="whitespace-nowrap text-sm">
                   Desde:
                 </Label>
                 <Input
-                  id="trans-date-from"
+                  id="main-date-from"
                   type="date"
-                  value={transDateFrom}
-                  onChange={(e) => {
-                    setTransDateFrom(e.target.value)
-                    setTransactionsPage(1)
-                  }}
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
                   className="w-full sm:w-auto"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <Label htmlFor="trans-date-to" className="whitespace-nowrap text-sm">
+                <Label htmlFor="main-date-to" className="whitespace-nowrap text-sm">
                   Hasta:
                 </Label>
                 <Input
-                  id="trans-date-to"
+                  id="main-date-to"
                   type="date"
-                  value={transDateTo}
-                  onChange={(e) => {
-                    setTransDateTo(e.target.value)
-                    setTransactionsPage(1)
-                  }}
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
                   className="w-full sm:w-auto"
                 />
               </div>
-              <Input
-                placeholder="Buscar por producto..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value)
-                  setTransactionsPage(1)
-                }}
-                className="max-w-sm"
-              />
             </div>
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40px]"></TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Método de Pago</TableHead>
-                    <TableHead className="text-right">Productos</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedTransactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
-                        No hay transacciones en el período seleccionado
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    paginatedTransactions.map((sale) => (
-                      <TableRow key={sale.id}>
-                        <TableCell></TableCell>
-                        <TableCell>
-                          {new Date(sale.date).toLocaleDateString("es-AR", {
-                            timeZone: "America/Argentina/Buenos_Aires",
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </TableCell>
-                        <TableCell>{sale.paymentMethod}</TableCell>
-                        <TableCell className="text-right">
-                          {sale.items.reduce((sum, item) => sum + item.quantity, 0)}
-                        </TableCell>
-                        <TableCell className="text-right">${sale.totalAmount.toLocaleString("es-AR")}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm">
-                            Ver
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+          </div>
+          <CardDescription>Este filtro aplica a los gráficos y al resumen de ventas por día</CardDescription>
+        </CardHeader>
+      </Card>
 
-            {filteredTransactions.length > TRANSACTIONS_PER_PAGE && (
-              <div className="flex items-center justify-between mt-4">
-                <p className="text-sm text-muted-foreground">
-                  Mostrando {(transactionsPage - 1) * TRANSACTIONS_PER_PAGE + 1} -{" "}
-                  {Math.min(transactionsPage * TRANSACTIONS_PER_PAGE, filteredTransactions.length)} de{" "}
-                  {filteredTransactions.length} transacciones
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setTransactionsPage((prev) => Math.max(prev - 1, 1))}
-                    disabled={transactionsPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm">
-                    Página {transactionsPage} de {totalTransactionPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setTransactionsPage((prev) => Math.min(prev + 1, totalTransactionPages))}
-                    disabled={transactionsPage === totalTransactionPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <SalesForm data={data} onSubmit={onAddSale} onRefresh={onRefresh} />
+        <Card className="flex-1">
+          <CardHeader>
+            <CardTitle>Estadísticas</CardTitle>
+            <CardDescription>Resumen del período seleccionado</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cantidad de Ventas por Día</CardTitle>
+                  <CardDescription>Número de transacciones diarias</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {salesByDay.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                      No hay datos de ventas para mostrar
+                    </div>
+                  ) : (
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={salesByDay}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tickFormatter={formatDate} />
+                          <YAxis />
+                          <Tooltip labelFormatter={formatChartDateFull} />
+                          <Legend />
+                          <Line
+                            type="monotone"
+                            dataKey="count"
+                            stroke="#3b82f6"
+                            strokeWidth={2}
+                            name="Cantidad de Ventas"
+                            dot={{ fill: "#3b82f6" }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Monto Total por Día</CardTitle>
+                  <CardDescription>Ingresos diarios totales</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {salesByDay.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+                      No hay datos de ventas para mostrar
+                    </div>
+                  ) : (
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={salesByDay}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tickFormatter={formatDate} />
+                          <YAxis />
+                          <Tooltip
+                            labelFormatter={formatChartDateFull}
+                            formatter={(value: number) => `$${value.toFixed(2)}`}
+                          />
+                          <Legend />
+                          <Line
+                            type="monotone"
+                            dataKey="total"
+                            stroke="#10b981"
+                            strokeWidth={2}
+                            name="Monto Total"
+                            dot={{ fill: "#10b981" }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* SalesForm dialog */}
-      <Dialog open={isSalesModalOpen} onOpenChange={setIsSalesModalOpen}>
-        <DialogContent className="max-w-full sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Registrar Venta</DialogTitle>
-            <DialogDescription>Complete los datos de la venta</DialogDescription>
-          </DialogHeader>
-          <SalesForm data={data} onSaleComplete={onSaleComplete} />
-        </DialogContent>
-      </Dialog>
-    </>
+      <Card>
+        <CardHeader>
+          <CardTitle>Resumen de Ventas por Día</CardTitle>
+          <CardDescription>Detalle de cantidad y monto total por día</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Cantidad de Ventas</TableHead>
+                  <TableHead className="text-right">Monto Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredSalesByDay.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="h-24 text-center">
+                      No hay ventas en el período seleccionado.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <>
+                    {filteredSalesByDay.map((day) => (
+                      <TableRow key={day.date}>
+                        <TableCell>{formatDate(day.date)}</TableCell>
+                        <TableCell className="text-right">{day.count}</TableCell>
+                        <TableCell className="text-right">${day.total.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="bg-muted/50 font-medium">
+                      <TableCell>Total</TableCell>
+                      <TableCell className="text-right">
+                        {filteredSalesByDay.reduce((sum, day) => sum + day.count, 0)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${filteredSalesByDay.reduce((sum, day) => sum + day.total, 0).toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  </>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle>Transacciones</CardTitle>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="trans-date-from" className="whitespace-nowrap text-sm">
+                    Desde:
+                  </Label>
+                  <Input
+                    id="trans-date-from"
+                    type="date"
+                    value={transDateFrom}
+                    onChange={(e) => setTransDateFrom(e.target.value)}
+                    className="w-full sm:w-auto"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="trans-date-to" className="whitespace-nowrap text-sm">
+                    Hasta:
+                  </Label>
+                  <Input
+                    id="trans-date-to"
+                    type="date"
+                    value={transDateTo}
+                    onChange={(e) => setTransDateTo(e.target.value)}
+                    className="w-full sm:w-auto"
+                  />
+                </div>
+              </div>
+            </div>
+            <CardDescription>Este filtro aplica solo a las transacciones</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[40px]"></TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Método de Pago</TableHead>
+                  <TableHead className="text-right">Productos</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedSales.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      No hay ventas registradas en el período seleccionado
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedSales.map((sale) => (
+                    <>
+                      <TableRow key={sale.id}>
+                        <TableCell
+                          className="cursor-pointer"
+                          onClick={() => setExpandedSale(expandedSale === sale.id ? null : sale.id)}
+                        >
+                          {expandedSale === sale.id ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(sale.date).toLocaleDateString("es-AR", {
+                            timeZone: "America/Argentina/Buenos_Aires",
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={`capitalize ${getPaymentMethodColor(sale.paymentMethod)}`}
+                          >
+                            {sale.paymentMethod}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{sale.items.length}</TableCell>
+                        <TableCell className="text-right font-medium">${sale.totalAmount.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditSale(sale)
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteSale(sale.id)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {expandedSale === sale.id && (
+                        <TableRow>
+                          <TableCell colSpan={6} className="bg-muted/20 p-4">
+                            <div className="space-y-2">
+                              <p className="text-sm font-semibold">Detalle de productos:</p>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead className="text-right">Cantidad</TableHead>
+                                    <TableHead className="text-right">Precio Unit.</TableHead>
+                                    <TableHead className="text-right">Subtotal</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {sale.items.map((item, idx) => (
+                                    <TableRow key={idx}>
+                                      <TableCell>{item.productName}</TableCell>
+                                      <TableCell className="text-right">{item.quantity}</TableCell>
+                                      <TableCell className="text-right">${item.unitPrice.toFixed(2)}</TableCell>
+                                      <TableCell className="text-right">${item.lineTotal.toFixed(2)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {totalTransactionPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {(transactionsPage - 1) * TRANSACTIONS_PER_PAGE + 1} -{" "}
+                {Math.min(transactionsPage * TRANSACTIONS_PER_PAGE, recentSales.length)} de {recentSales.length}{" "}
+                transacciones
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTransactionsPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={transactionsPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm">
+                  Página {transactionsPage} de {totalTransactionPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTransactionsPage((prev) => Math.min(prev + 1, totalTransactionPages))}
+                  disabled={transactionsPage === totalTransactionPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
