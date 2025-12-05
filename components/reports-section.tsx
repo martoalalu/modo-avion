@@ -103,7 +103,22 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
   }, [filteredSalesByDay])
 
   const salesByDay = useMemo(() => {
-    const grouped = data.sales.reduce(
+    const filteredSales = data.sales.filter((sale) => {
+      const saleDateOnly = new Date(sale.date)
+        .toLocaleDateString("es-AR", {
+          timeZone: "America/Argentina/Buenos_Aires",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+        .split("/")
+        .reverse()
+        .join("-")
+
+      return saleDateOnly >= summaryDateFrom && saleDateOnly <= summaryDateTo
+    })
+
+    const grouped = filteredSales.reduce(
       (acc, sale) => {
         const dateOnly = new Date(sale.date)
           .toLocaleDateString("es-AR", {
@@ -127,7 +142,7 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
     )
 
     return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date))
-  }, [data.sales])
+  }, [data.sales, summaryDateFrom, summaryDateTo])
 
   const inventory = useMemo(() => {
     return data.products.map((product) => {
@@ -267,11 +282,37 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex justify-end">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Button onClick={() => setIsSalesModalOpen(true)} size="lg">
             <Plus className="mr-2 h-4 w-4" />
             Registrar Venta
           </Button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="summary-date-from" className="whitespace-nowrap text-sm">
+                Desde:
+              </Label>
+              <Input
+                id="summary-date-from"
+                type="date"
+                value={summaryDateFrom}
+                onChange={(e) => setSummaryDateFrom(e.target.value)}
+                className="w-full sm:w-auto"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="summary-date-to" className="whitespace-nowrap text-sm">
+                Hasta:
+              </Label>
+              <Input
+                id="summary-date-to"
+                type="date"
+                value={summaryDateTo}
+                onChange={(e) => setSummaryDateTo(e.target.value)}
+                className="w-full sm:w-auto"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
@@ -349,37 +390,9 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
 
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle>Resumen de Ventas por Día</CardTitle>
-                <CardDescription>Cantidad de ventas y monto total por día</CardDescription>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="summary-date-from" className="whitespace-nowrap text-sm">
-                    Desde:
-                  </Label>
-                  <Input
-                    id="summary-date-from"
-                    type="date"
-                    value={summaryDateFrom}
-                    onChange={(e) => setSummaryDateFrom(e.target.value)}
-                    className="w-full sm:w-auto"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="summary-date-to" className="whitespace-nowrap text-sm">
-                    Hasta:
-                  </Label>
-                  <Input
-                    id="summary-date-to"
-                    type="date"
-                    value={summaryDateTo}
-                    onChange={(e) => setSummaryDateTo(e.target.value)}
-                    className="w-full sm:w-auto"
-                  />
-                </div>
-              </div>
+            <div>
+              <CardTitle>Resumen de Ventas por Día</CardTitle>
+              <CardDescription>Cantidad de ventas y monto total por día</CardDescription>
             </div>
           </CardHeader>
           <CardContent>

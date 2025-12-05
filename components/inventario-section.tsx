@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Pencil, Trash2, ArrowUpDown, X, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, Pencil, Trash2, ArrowUpDown, X, ChevronLeft, ChevronRight, Check, ChevronsUpDown } from "lucide-react"
 import { generateId, getAvailableStock, getLastSaleDate, generateSKU, getTotalUnitsSold } from "@/lib/storage"
 import type {
   Product,
@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 
 const PRELOADE_IPHONE_MODELS = [
   "16 PRO MAX",
@@ -54,6 +55,163 @@ const PRELOADE_IPHONE_MODELS = [
 
 const ITEMS_PER_PAGE = 20 // Show 20 items per page for better performance
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200]
+
+function StockProductSearchDropdown({
+  products,
+  value,
+  onChange,
+}: {
+  products: Product[]
+  value: string
+  onChange: (productId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const filteredProducts = useMemo(() => {
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return []
+    }
+
+    const searchLower = (debouncedSearch || "").toLowerCase().trim()
+
+    if (!searchLower) {
+      return products.slice(0, 5)
+    }
+
+    // Split search into words for multi-word matching
+    const searchWords = searchLower.split(/\s+/).filter((word) => word.length > 0)
+
+    const results: Product[] = []
+    for (let i = 0; i < products.length && results.length < 5; i++) {
+      const product = products[i]
+      if (!product || typeof product !== "object") continue
+
+      try {
+        const name = String(product.name || "").toLowerCase()
+        const color = String(product.color || "").toLowerCase()
+        const model = String(product.model || "").toLowerCase()
+        const combinedText = `${name} ${color} ${model}`
+
+        // Check if ALL search words are present in the combined text
+        const allWordsMatch = searchWords.every((word) => combinedText.includes(word))
+
+        if (allWordsMatch) {
+          results.push(product)
+        }
+      } catch {
+        continue
+      }
+    }
+
+    return results
+  }, [products, debouncedSearch])
+
+  const selectedProduct = useMemo(() => {
+    if (!products || !Array.isArray(products) || !value) return null
+    return products.find((p) => String(p?.id) === String(value)) || null
+  }, [products, value])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation()
+    setSearch(e.target.value)
+  }, [])
+
+  const handleProductSelect = useCallback(
+    (productId: string | number) => {
+      onChange(String(productId))
+      setSearch("")
+      setDebouncedSearch("")
+      setOpen(false)
+    },
+    [onChange],
+  )
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className={cn(
+          "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background cursor-pointer",
+          open && "ring-2 ring-ring ring-offset-2",
+        )}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span className={cn("truncate", !selectedProduct && "text-muted-foreground")}>
+          {selectedProduct
+            ? `${selectedProduct.name}${selectedProduct.color ? ` - ${selectedProduct.color}` : ""}${selectedProduct.model ? ` (${selectedProduct.model})` : ""}`
+            : "Seleccione un producto..."}
+        </span>
+        <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+      </div>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-lg">
+          <div className="p-2">
+            <Input
+              placeholder="Buscar por nombre, color, modelo..."
+              value={search}
+              onChange={handleSearchChange}
+              className="h-9"
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="max-h-60 overflow-y-auto p-1">
+            {filteredProducts.length > 0 ? (
+              filteredProducts.map((product) => {
+                if (!product) return null
+                const isSelected = String(product.id) === String(value)
+                return (
+                  <div
+                    key={product.id}
+                    className={cn(
+                      "flex cursor-pointer items-center rounded-sm px-2 py-2 text-sm hover:bg-accent",
+                      isSelected && "bg-accent",
+                    )}
+                    onClick={() => handleProductSelect(product.id)}
+                  >
+                    <Check className={cn("mr-2 h-4 w-4 shrink-0", isSelected ? "opacity-100" : "opacity-0")} />
+                    <div className="flex flex-col min-w-0">
+                      <div className="font-medium truncate">{product.name || "Sin nombre"}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {product.color && `${product.color}`}
+                        {product.model && ` • ${product.model}`}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="p-3 text-sm text-muted-foreground text-center">
+                {debouncedSearch ? "No se encontraron productos" : "No hay productos disponibles"}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function InventarioSection({ data, updateData }: InventarioSectionProps) {
   const { toast } = useToast()
@@ -176,6 +334,29 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
           }
         })
       })()
+
+      if (product.name.includes("FIBRA DE CARBONO") || product.name.includes("CARBONO")) {
+        const stock = getAvailableStock(product.id, data)
+        console.log("[v0] CARBONO product filter check:", {
+          name: product.name,
+          id: product.id,
+          stock,
+          filterStock,
+          matchesStockFilter,
+          matchesSearch,
+          matchesModel,
+          matchesCategory,
+          matchesColor,
+          matchesTotalSoldFilter,
+          allMatch:
+            matchesSearch &&
+            matchesModel &&
+            matchesCategory &&
+            matchesColor &&
+            matchesStockFilter &&
+            matchesTotalSoldFilter,
+        })
+      }
 
       return (
         matchesSearch && matchesModel && matchesCategory && matchesColor && matchesStockFilter && matchesTotalSoldFilter
@@ -584,6 +765,8 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
       quantity: "",
       date: new Date().toISOString().split("T")[0],
     })
+
+    alert("Stock agregado exitosamente")
   }
 
   const toggleFilter = (currentFilters: string[], value: string) => {
@@ -1566,31 +1749,11 @@ export function InventarioSection({ data, updateData }: InventarioSectionProps) 
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="stock-product">Producto *</Label>
-                <Input
-                  placeholder="Buscar producto por nombre, color, modelo..."
-                  value={stockProductSearch}
-                  onChange={(e) => setStockProductSearch(e.target.value)}
-                  className="mb-2"
-                />
-                <Select
+                <StockProductSearchDropdown
+                  products={data?.products || []}
                   value={stockFormData.productId}
-                  onValueChange={(value) => setStockFormData({ ...stockFormData, productId: value })}
-                >
-                  <SelectTrigger id="stock-product">
-                    <SelectValue placeholder="Seleccione un producto" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {filteredStockProducts.map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {product.name} {product.color ? `- ${product.color}` : ""}{" "}
-                        {product.model ? `- ${product.model}` : ""}
-                      </SelectItem>
-                    ))}
-                    {filteredStockProducts.length === 0 && (
-                      <div className="p-2 text-sm text-muted-foreground text-center">No se encontraron productos</div>
-                    )}
-                  </SelectContent>
-                </Select>
+                  onChange={(value) => setStockFormData({ ...stockFormData, productId: value })}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="stock-quantity">Cantidad *</Label>

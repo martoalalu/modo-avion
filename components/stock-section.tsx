@@ -84,7 +84,7 @@ function ProductSearchDropdown({
 
   const selectedProduct = useMemo(() => {
     if (!products || !Array.isArray(products) || !value) return null
-    return products.find((p) => p?.id === value) || null
+    return products.find((p) => String(p?.id) === String(value)) || null
   }, [products, value])
 
   // Close dropdown when clicking outside
@@ -105,8 +105,8 @@ function ProductSearchDropdown({
   }, [])
 
   const handleProductSelect = useCallback(
-    (productId: string) => {
-      onChange(productId)
+    (productId: string | number) => {
+      onChange(String(productId))
       setSearch("")
       setDebouncedSearch("")
       setOpen(false)
@@ -154,7 +154,7 @@ function ProductSearchDropdown({
             {filteredProducts.length > 0 ? (
               filteredProducts.map((product) => {
                 if (!product) return null
-                const isSelected = product.id === value
+                const isSelected = String(product.id) === String(value)
                 return (
                   <div
                     key={product.id}
