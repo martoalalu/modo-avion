@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { Plus, Trash2, Check, ChevronsUpDown } from "lucide-react"
+import { Plus, Trash2, Check, ChevronsUpDown, ChevronDown, ChevronUp } from "lucide-react"
 import { generateId, getAvailableStock } from "@/lib/storage"
 import type { AppData, Sale, SaleItem, Product } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 interface SalesFormProps {
   data: AppData
@@ -24,6 +25,7 @@ interface SaleItemForm {
   productId: string
   quantity: string
   unitPrice: string
+  isCollapsed: boolean // Add collapsed state per item
 }
 
 function filterProducts(products: Product[] | undefined | null, searchTerm: string): Product[] {
@@ -212,9 +214,12 @@ function ProductSearchDropdown({
 export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFormProps) {
   const [saleDate, setSaleDate] = useState(existingSale?.date || new Date().toISOString().split("T")[0])
   const [paymentMethod, setPaymentMethod] = useState(existingSale?.paymentMethod || "efectivo")
-  const [items, setItems] = useState<SaleItemForm[]>([{ productId: "", quantity: "", unitPrice: "" }])
+  const [items, setItems] = useState<SaleItemForm[]>([
+    { productId: "", quantity: "", unitPrice: "", isCollapsed: false },
+  ])
   const [manualTotal, setManualTotal] = useState<string>("")
   const [isManualTotalEdited, setIsManualTotalEdited] = useState(false)
+  const [expectedProductCount, setExpectedProductCount] = useState<string>("")
 
   useEffect(() => {
     if (existingSale) {
@@ -225,15 +230,34 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
           productId: item.productId,
           quantity: item.quantity.toString(),
           unitPrice: item.unitPrice.toString(),
+          isCollapsed: false,
         })),
       )
       setManualTotal(existingSale.totalAmount.toString())
       setIsManualTotalEdited(false)
+      setExpectedProductCount(existingSale.items.length.toString())
     }
   }, [existingSale])
 
+  const completedItemsCount = useMemo(() => {
+    return items.filter(
+      (item) =>
+        item.productId &&
+        item.quantity &&
+        Number.parseFloat(item.quantity) > 0 &&
+        item.unitPrice &&
+        Number.parseFloat(item.unitPrice) >= 0,
+    ).length
+  }, [items])
+
+  const expectedCount = Number.parseInt(expectedProductCount) || 0
+
   const addItem = () => {
-    setItems([...items, { productId: "", quantity: "", unitPrice: "" }])
+    const updatedItems = items.map((item) => ({
+      ...item,
+      isCollapsed: item.productId ? true : item.isCollapsed,
+    }))
+    setItems([...updatedItems, { productId: "", quantity: "", unitPrice: "", isCollapsed: false }])
   }
 
   const removeItem = (index: number) => {
@@ -242,17 +266,23 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
     }
   }
 
-  const updateItem = (index: number, field: keyof SaleItemForm, value: string) => {
+  const updateItem = (index: number, field: keyof SaleItemForm, value: string | boolean) => {
     const newItems = [...items]
     newItems[index] = { ...newItems[index], [field]: value }
 
-    if (field === "productId" && value) {
+    if (field === "productId" && value && typeof value === "string") {
       const product = (data?.products || []).find((p) => p.id === value)
       if (product) {
         newItems[index].unitPrice = product.defaultUnitPrice.toString()
       }
     }
 
+    setItems(newItems)
+  }
+
+  const toggleItemCollapse = (index: number) => {
+    const newItems = [...items]
+    newItems[index] = { ...newItems[index], isCollapsed: !newItems[index].isCollapsed }
     setItems(newItems)
   }
 
@@ -364,11 +394,12 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
       alert("Venta registrada con éxito")
     }
 
-    setItems([{ productId: "", quantity: "", unitPrice: "" }])
+    setItems([{ productId: "", quantity: "", unitPrice: "", isCollapsed: false }])
     setSaleDate(new Date().toISOString().split("T")[0])
     setPaymentMethod("efectivo")
     setManualTotal("")
     setIsManualTotalEdited(false)
+    setExpectedProductCount("")
 
     if (onSuccess) {
       onSuccess()
@@ -399,6 +430,40 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
         </div>
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="expected-count">Cantidad de productos en esta venta</Label>
+        <div className="flex items-center gap-3">
+          <Input
+            id="expected-count"
+            type="number"
+            min="1"
+            max="50"
+            value={expectedProductCount}
+            onChange={(e) => setExpectedProductCount(e.target.value)}
+            placeholder="Ej: 3"
+            className="w-32"
+          />
+          {expectedCount > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-32 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${Math.min((completedItemsCount / expectedCount) * 100, 100)}%` }}
+                />
+              </div>
+              <span
+                className={cn(
+                  "text-sm font-medium",
+                  completedItemsCount >= expectedCount ? "text-green-600" : "text-muted-foreground",
+                )}
+              >
+                {completedItemsCount} de {expectedCount} productos
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Label>Productos</Label>
@@ -413,70 +478,106 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
           {items.map((item, index) => {
             const availableStock = item.productId ? getAvailableStock(item.productId, data) : 0
             const selectedProduct = item.productId ? (data?.products || []).find((p) => p.id === item.productId) : null
+            const isComplete = item.productId && item.quantity && Number.parseFloat(item.quantity) > 0 && item.unitPrice
 
             return (
-              <Card key={index} className="relative">
-                <CardContent className="p-3 space-y-3 sm:p-4">
-                  <div className="absolute top-2 right-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeItem(index)}
-                      disabled={items.length === 1}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="space-y-2 pr-8">
-                    <Label className="text-sm">Producto</Label>
-                    <ProductSearchDropdown
-                      products={data?.products || []}
-                      value={item.productId}
-                      onChange={(productId) => updateItem(index, "productId", productId)}
-                      data={data}
-                    />
-                  </div>
-
-                  {selectedProduct && (
-                    <div className="text-sm text-muted-foreground space-y-1">
-                      {selectedProduct.color && <div>Color: {selectedProduct.color}</div>}
-                      {selectedProduct.model && <div>Modelo: {selectedProduct.model}</div>}
+              <Card
+                key={index}
+                className={cn("relative", isComplete && item.isCollapsed && "border-green-200 bg-green-50/50")}
+              >
+                <Collapsible open={!item.isCollapsed} onOpenChange={() => toggleItemCollapse(index)}>
+                  <div className="flex items-center justify-between p-3 sm:p-4">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {isComplete && item.isCollapsed ? (
+                        <>
+                          <Check className="h-4 w-4 text-green-600 shrink-0" />
+                          <div className="truncate">
+                            <span className="font-medium">{selectedProduct?.name}</span>
+                            {selectedProduct?.model && (
+                              <span className="text-muted-foreground ml-1">({selectedProduct.model})</span>
+                            )}
+                            {selectedProduct?.color && (
+                              <span className="text-muted-foreground ml-1">- {selectedProduct.color}</span>
+                            )}
+                            <span className="text-muted-foreground ml-2">
+                              x{item.quantity} = ${calculateLineTotal(item).toFixed(2)}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <span className="font-medium">Producto {index + 1}</span>
+                      )}
                     </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-sm">Cantidad</Label>
-                      <Input
-                        type="number"
-                        min="1"
-                        max={availableStock}
-                        value={item.quantity}
-                        onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                        placeholder="0"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-sm">Precio Unit.</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={item.unitPrice}
-                        onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
-                        placeholder="0.00"
-                      />
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeItem(index)}
+                        disabled={items.length === 1}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <CollapsibleTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm">
+                          {item.isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                        </Button>
+                      </CollapsibleTrigger>
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-center pt-2 border-t">
-                    <span className="text-xs font-medium text-muted-foreground sm:text-sm">Subtotal</span>
-                    <span className="text-base font-bold sm:text-lg">${calculateLineTotal(item).toFixed(2)}</span>
-                  </div>
-                </CardContent>
+                  <CollapsibleContent>
+                    <CardContent className="p-3 pt-0 space-y-3 sm:p-4 sm:pt-0">
+                      <div className="space-y-2">
+                        <Label className="text-sm">Producto</Label>
+                        <ProductSearchDropdown
+                          products={data?.products || []}
+                          value={item.productId}
+                          onChange={(productId) => updateItem(index, "productId", productId)}
+                          data={data}
+                        />
+                      </div>
+
+                      {selectedProduct && (
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          {selectedProduct.color && <div>Color: {selectedProduct.color}</div>}
+                          {selectedProduct.model && <div>Modelo: {selectedProduct.model}</div>}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                        <div className="space-y-2">
+                          <Label className="text-sm">Cantidad</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max={availableStock}
+                            value={item.quantity}
+                            onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                            placeholder="0"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-sm">Precio Unit.</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.unitPrice}
+                            onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2 border-t">
+                        <span className="text-xs font-medium text-muted-foreground sm:text-sm">Subtotal</span>
+                        <span className="text-base font-bold sm:text-lg">${calculateLineTotal(item).toFixed(2)}</span>
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Collapsible>
               </Card>
             )
           })}
@@ -528,11 +629,12 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
           type="button"
           variant="outline"
           onClick={() => {
-            setItems([{ productId: "", quantity: "", unitPrice: "" }])
+            setItems([{ productId: "", quantity: "", unitPrice: "", isCollapsed: false }])
             setSaleDate(new Date().toISOString().split("T")[0])
             setPaymentMethod("efectivo")
             setManualTotal("")
             setIsManualTotalEdited(false)
+            setExpectedProductCount("")
           }}
         >
           Limpiar
