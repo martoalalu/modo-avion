@@ -403,12 +403,13 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
                     <TableHead>Fecha</TableHead>
                     <TableHead className="text-right">Cantidad de Ventas</TableHead>
                     <TableHead className="text-right">Monto Total</TableHead>
+                    <TableHead className="text-right">Ticket Promedio</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredSalesByDay.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">
                         No hay ventas registradas en el período seleccionado
                       </TableCell>
                     </TableRow>
@@ -417,14 +418,20 @@ export function ReportsSection({ data, updateData }: ReportsSectionProps) {
                       {filteredSalesByDay.map((day) => (
                         <TableRow key={day.date}>
                           <TableCell className="font-medium">{formatTableDate(day.date)}</TableCell>
-                          <TableCell className="text-right">{day.count}</TableCell>
-                          <TableCell className="text-right">${day.total.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{Math.round(day.count)}</TableCell>
+                          <TableCell className="text-right">${Math.round(day.total)}</TableCell>
+                          <TableCell className="text-right">
+                            ${day.count > 0 ? Math.round(day.total / day.count) : 0}
+                          </TableCell>
                         </TableRow>
                       ))}
                       <TableRow className="bg-muted/50 font-bold">
                         <TableCell>Total</TableCell>
-                        <TableCell className="text-right">{summaryTotals.count}</TableCell>
-                        <TableCell className="text-right">${summaryTotals.total.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{Math.round(summaryTotals.count)}</TableCell>
+                        <TableCell className="text-right">${Math.round(summaryTotals.total)}</TableCell>
+                        <TableCell className="text-right">
+                          ${summaryTotals.count > 0 ? Math.round(summaryTotals.total / summaryTotals.count) : 0}
+                        </TableCell>
                       </TableRow>
                     </>
                   )}
