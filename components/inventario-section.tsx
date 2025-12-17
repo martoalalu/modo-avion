@@ -47,6 +47,7 @@ const PRELOADE_IPHONE_MODELS = [
   "14 PRO MAX",
   "14 PRO",
   "14",
+  "13/14",
   "13",
   "13 PRO MAX",
   "13 PRO",
