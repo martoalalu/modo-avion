@@ -52,6 +52,17 @@ const PRELOADE_IPHONE_MODELS = [
   "13 PRO MAX",
   "13 PRO",
   "11",
+  "15",
+  "12",
+  "12 PRO",
+  "17",
+  "17 AIR",
+  "17 PRO",
+  "17 PRO MAX",
+  "12 PRO MAX",
+  "7/8/SE",
+  "XR"
+  
 ]
 
 const ITEMS_PER_PAGE = 20 // Show 20 items per page for better performance
