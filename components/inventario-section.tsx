@@ -39,29 +39,7 @@ import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
 const PRELOADE_IPHONE_MODELS = [
-  "16 PRO MAX",
-  "16 PRO",
-  "16",
-  "15 PRO MAX",
-  "15 PRO",
-  "14 PRO MAX",
-  "14 PRO",
-  "14",
-  "13/14",
-  "13",
-  "13 PRO MAX",
-  "13 PRO",
-  "11",
-  "15",
-  "12",
-  "12 PRO",
-  "17",
-  "17 AIR",
-  "17 PRO",
-  "17 PRO MAX",
-  "12 PRO MAX",
-  "7/8/SE",
-  "XR"
+  "test"
   
 ]
 
