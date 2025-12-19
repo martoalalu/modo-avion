@@ -423,8 +423,7 @@ export function SalesForm({ data, updateData, onSuccess, existingSale }: SalesFo
             <SelectContent>
               <SelectItem value="efectivo">Efectivo</SelectItem>
               <SelectItem value="tarjeta">Tarjeta</SelectItem>
-              <SelectItem value="transferencia">Transferencia</SelectItem>
-              <SelectItem value="qr">QR</SelectItem>
+              <SelectItem value="mp">Mercado Pago</SelectItem>
             </SelectContent>
           </Select>
         </div>
